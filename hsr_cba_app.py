@@ -43,7 +43,7 @@ def run_cba(p):
     capex_cf = p['counterfactual_capex']
     capex_incr = capex_hsr - capex_cf
 
-    CY, AY = p['constr_years'], p['appraisal_yrs']
+    CY, AY = int(p['constr_years']), int(p['appraisal_yrs'])
     dr = p['discount'] / 100
     train_km = p['trains_day'] * p['op_days'] * L
 
@@ -490,7 +490,9 @@ for pname, label in tornado_params:
     for mult, direction in [(0.8, 'low'), (1.2, 'high')]:
         tv = bv * mult
         if bv == 0: tv = (20 if direction == 'high' else 0)
-        pp = params.copy(); pp[pname] = max(0, tv)
+        tv = max(0, tv)
+        if isinstance(bv, int): tv = int(round(tv))
+        pp = params.copy(); pp[pname] = tv
         ss, _ = run_cba(pp)
         t_data.append(dict(param=label, direction=direction, bcr=ss['bcr_abs']))
 t_df = pd.DataFrame(t_data)
