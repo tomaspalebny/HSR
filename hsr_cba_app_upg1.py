@@ -439,7 +439,7 @@ def run_cba(p):
     S['train_km_m'] = train_km / 1e6
     S['eff_saving_min'] = effective_saving_min
 
-    # --- IRR (approximate via numpy) ---
+    # --- IRR on incremental social net flows (approximate via numpy) ---
     net_flows = []
     for _, row in df_all.iterrows():
         net = -(row['capex_hsr'] - row['capex_cf']) - (row['opex_hsr'] - row['opex_cf'])
@@ -688,8 +688,9 @@ At the end of the appraisal period, a percentage of original CAPEX is
 credited as residual (net of counterfactual residual).
 
 ### IRR
-Internal Rate of Return is the discount rate at which NPV = 0, solved
-numerically via bisection.
+Internal Rate of Return here is computed on **incremental social net flows**
+(HSR minus counterfactual), i.e. it is aligned with the incremental perspective.
+It is solved numerically via bisection.
 
 ## Base-Case Results
 | Metric | Value |
@@ -699,7 +700,7 @@ numerically via bisection.
 | NPV Financial | {S['npv_fin']:,.0f} €m |
 | BCR (absolute) | {S['bcr_abs']:.3f} |
 | BCR (incremental) | {format_bcr(S['bcr_incr'])} |
-| IRR | {S['irr']:.1f}% |
+| IRR (incremental) | {S['irr']:.1f}% |
 | Payback year | {S['payback_year'] if S['payback_year'] else 'Not reached'} |
 | Commercially viable | {'Yes' if S['npv_fin'] > 0 else 'No'} |
 | Socially desirable (BCR ≥ 1) | {'Yes' if S['bcr_abs'] >= 1.0 else 'No'} |
@@ -1109,7 +1110,7 @@ with tab_exec:
     c2.metric("Social BCR (incr)", format_bcr(S['bcr_incr']))
     c3.metric("NPV Social (€m)", f"{S['npv_abs']:,.0f}")
     c4.metric("NPV Financial (€m)", f"{S['npv_fin']:,.0f}")
-    c5.metric("IRR (%)", f"{S['irr']:.1f}")
+    c5.metric("IRR incr (%)", f"{S['irr']:.1f}", help="Computed on incremental social net flows (HSR minus counterfactual).")
     c6.metric("Payback (yr)", f"{S['payback_year']}" if S['payback_year'] else "N/A")
 
     c7, c8, c9, c10 = st.columns(4)
@@ -1575,14 +1576,14 @@ with tab_compare:
     rename = {
         'capex_hsr': 'CAPEX (€m)', 'capex_per_km': '€m/km', 'bcr_abs': 'BCR abs',
         'bcr_incr': 'BCR incr', 'npv_abs': 'NPV soc (€m)', 'npv_fin': 'NPV fin (€m)',
-        'irr': 'IRR (%)', 'eff_saving_min': 'Eff. Δt (min)', 'opex_yr1': 'OPEX yr1 (€m)',
+        'irr': 'IRR incr (%)', 'eff_saving_min': 'Eff. Δt (min)', 'opex_yr1': 'OPEX yr1 (€m)',
     }
     available_cols = [c for c in display_cols if c in comp_df.columns]
     st.dataframe(
         comp_df[available_cols].rename(columns=rename).style.format({
             'CAPEX (€m)': '{:,.0f}', '€m/km': '{:.1f}', 'BCR abs': '{:.3f}',
             'BCR incr': lambda v: format_bcr(v), 'NPV soc (€m)': '{:,.0f}', 'NPV fin (€m)': '{:,.0f}',
-            'IRR (%)': '{:.1f}', 'Eff. Δt (min)': '{:.0f}', 'OPEX yr1 (€m)': '{:.0f}',
+            'IRR incr (%)': '{:.1f}', 'Eff. Δt (min)': '{:.0f}', 'OPEX yr1 (€m)': '{:.0f}',
         }),
         use_container_width=True, height=600,
     )
@@ -1664,7 +1665,7 @@ $$PV = \sum_{t=0}^{T} \frac{CF_t}{(1+r)^t}$$
 
 - **NPV** = PV(benefits) − PV(costs)
 - **BCR** = PV(benefits) / PV(costs)
-- **IRR** = the discount rate at which NPV = 0 (solved numerically)
+- **IRR (incremental)** = the discount rate at which incremental social NPV = 0 (solved numerically)
 
 **Absolute** perspective: PV(costs) includes all HSR CAPEX and OPEX.
 **Incremental** perspective: PV(costs) deducts the counterfactual CAPEX and OPEX.
@@ -1728,7 +1729,7 @@ with tab_audit:
 
 **BCR** = Σ(benefits_t × df_t) / Σ(costs_t × df_t)
 
-**IRR** = rate r* such that Σ(net_flow_t / (1+r*)^t) = 0
+**IRR (incremental)** = rate r* such that Σ(net_flow_incr,t / (1+r*)^t) = 0
         """)
 
     # Display annual data
