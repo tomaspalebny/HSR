@@ -1,0 +1,11 @@
+Copyright (c) 2026 Tomáš Paleta. All rights reserved.
+
+No part of this software, source code, documentation, or generated outputs
+may be reproduced, modified, distributed, sublicensed, or used for commercial
+or non-commercial purposes without prior written permission from the copyright
+holder.
+
+This is proprietary software. All rights reserved.
+
+For licensing inquiries or permission to use this software, please contact
+the copyright holder.

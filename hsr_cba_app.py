@@ -6,6 +6,20 @@ import plotly.express as px
 
 st.set_page_config(page_title="HSR CBA Analyser", layout="wide", page_icon="🚄")
 
+# ════════════════════════════════════════════════════════════════
+# HSR Social CBA Sensitivity Analyser
+# ════════════════════════════════════════════════════════════════
+# Copyright (c) 2026 Tomáš Paleta
+# All rights reserved.
+#
+# This software and accompanying documentation may not be copied,
+# modified, distributed, sublicensed, or used for commercial or
+# non-commercial purposes without prior written permission from the
+# copyright holder.
+#
+# For licensing requests or academic citations, contact the author.
+# ════════════════════════════════════════════════════════════════
+
 
 def is_defined_metric(value):
     return value is not None and not pd.isna(value)

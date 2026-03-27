@@ -38,6 +38,20 @@ Implications for Central and Eastern Europe" (Nash, Jandová, Paleta,
 Król, 2026).
 """
 
+# ════════════════════════════════════════════════════════════════
+# Copyright Notice
+# ════════════════════════════════════════════════════════════════
+# Copyright (c) 2026 Tomáš Paleta
+# All rights reserved.
+#
+# This software and accompanying documentation may not be copied,
+# modified, distributed, sublicensed, or used for commercial or
+# non-commercial purposes without prior written permission from the
+# copyright holder.
+#
+# For licensing requests or academic citations, contact the author.
+# ════════════════════════════════════════════════════════════════
+
 import streamlit as st
 import numpy as np
 import pandas as pd
@@ -813,6 +827,13 @@ be interpreted alongside NPV and BCR, not as substitutes for them.
 simplified cashflow, no distributional analysis, no phasing/real options,
 deterministic counterfactual.*
 """
+
+    # Add copyright footer to report
+    doc += "\n\n---\n"
+    doc += "\n**Copyright © 2026 Tomáš Paleta. All rights reserved.**\n"
+    doc += "\nThis report and the underlying software may not be reproduced or redistributed without permission. "
+    doc += "For licensing requests or academic citations, contact the author.\n"
+
     return doc
 
 
@@ -1742,6 +1763,8 @@ counterfactual (conventional rail upgrade), and reports both incremental and abs
 - **No endogenous mode-choice model** is used; modal shares are user-specified.
 """)
 
+    st.caption("© 2026 Tomáš Paleta. All rights reserved. Unauthorized copying or redistribution prohibited.")
+
     st.markdown("### Generalised Cost & Time Savings")
     st.markdown(r"""
 The effective time saving is:
@@ -1935,3 +1958,5 @@ Model limitations: simplified cashflow, no distributional analysis, no phasing/r
 deterministic counterfactual. See Methodology tab for full documentation.
 </div>
 """, unsafe_allow_html=True)
+
+st.caption("© 2026 Tomáš Paleta. All rights reserved. Unauthorized copying or redistribution prohibited.")
