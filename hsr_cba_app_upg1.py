@@ -8,7 +8,7 @@ Model scope:
   (conventional rail upgrade). The model is strictly incremental.
 
 Analytical features:
-  • Deterministic base-case CBA (NPV, BCR, IRR, payback year)
+    • Deterministic base-case CBA (NPV, BCR, IRR, nominal & discounted payback)
   • Incremental and absolute perspectives
   • Reference Class Forecasting (Flyvbjerg et al.)
   • One-way sensitivity (tornado) for any parameter
@@ -103,7 +103,7 @@ PARAM_META = {
     "co2_price":        ("CO₂ price",            "€/tonne",  "Shadow price of CO₂ for monetising emission savings.", "externality"),
     "co2_per_mpax":     ("CO₂ saved",            "t/m shifted pax","Tonnes of CO₂ avoided per million passengers shifted from air.", "externality"),
     "accident_ben":     ("Accident benefit",     "€m/m car pax","Avoided accident cost per million passengers shifted from car.", "externality"),
-    "congestion":       ("Congestion relief",    "€m/yr",    "Annual road congestion benefit from modal shift.", "externality"),
+    "congestion":       ("Congestion relief",    "€m/yr",    "Base-year annual road congestion benefit associated with the base-year shift from car; scaled over time with shifted car passengers.", "externality"),
     "webs_pct":         ("WEBs",                 "% of time","Wider Economic Benefits as a share of user time savings.", "externality"),
     "discount":         ("Discount rate",        "%",        "Social discount rate for present-value calculation. EU guide: 3–5%.", "appraisal"),
     "appraisal_yrs":    ("Appraisal period",     "yr",       "Operating years over which benefits and costs are evaluated.", "appraisal"),
@@ -360,8 +360,13 @@ def run_cba(p):
         # Accident benefit: only car shift
         acc = (shifted_car_m * p['accident_ben']) if inc_acc else 0
 
-        # Congestion relief
-        cong = p['congestion'] if inc_cong else 0
+        # Congestion relief is anchored to base-year car shift and scales with shifted car passengers.
+        base_shifted_car_m = p['annual_pax'] * car_s
+        if inc_cong and base_shifted_car_m > 0:
+            cong_unit = p['congestion'] / base_shifted_car_m
+            cong = shifted_car_m * cong_unit
+        else:
+            cong = 0
 
         # WEBs as % of total time benefits
         total_time = time_biz + time_com + time_lei + time_gen
@@ -453,14 +458,27 @@ def run_cba(p):
     except Exception:
         S['irr'] = _irr_manual(net_flows) * 100
 
-    # --- Payback year ---
-    cum = 0
-    S['payback_year'] = None
+    # --- Payback on incremental social net flows ---
+    discounted_net_flows = [nf * dfi for nf, dfi in zip(net_flows, df_all['df'])]
+
+    cum_nom = 0
+    S['payback_year_nominal'] = None
     for i, nf in enumerate(net_flows):
-        cum += nf
-        if cum >= 0 and i > 0:
-            S['payback_year'] = i
+        cum_nom += nf
+        if cum_nom >= 0 and i > 0:
+            S['payback_year_nominal'] = i
             break
+
+    cum_disc = 0
+    S['payback_year_discounted'] = None
+    for i, nf in enumerate(discounted_net_flows):
+        cum_disc += nf
+        if cum_disc >= 0 and i > 0:
+            S['payback_year_discounted'] = i
+            break
+
+    # Backward-compatible alias for existing outputs.
+    S['payback_year'] = S['payback_year_nominal']
 
     return S, df_all
 
@@ -668,7 +686,7 @@ time-benefit stream.
 - **CO₂**: Shifted air passengers save `co2_per_mpax` tonnes per million pax;
   shifted car passengers save 40% of that rate. Valued at the shadow CO₂ price.
 - **Accidents**: Avoided road accidents valued per million car passengers shifted.
-- **Congestion**: Fixed annual road-congestion relief (simplified).
+- **Congestion**: Base-year annual road-congestion relief tied to base-year car shift and scaled with shifted car passengers (simplified).
 - **WEBs**: Wider Economic Benefits modelled as a percentage of user time savings.
 - **Frequency/reliability**: Proxy benefit at 5% of time savings.
 
@@ -701,7 +719,8 @@ It is solved numerically via bisection.
 | BCR (absolute) | {S['bcr_abs']:.3f} |
 | BCR (incremental) | {format_bcr(S['bcr_incr'])} |
 | IRR (incremental) | {S['irr']:.1f}% |
-| Payback year | {S['payback_year'] if S['payback_year'] else 'Not reached'} |
+| Payback year (nominal, undiscounted) | {S['payback_year_nominal'] if S['payback_year_nominal'] is not None else 'Not reached'} |
+| Discounted payback year (DPP) | {S['payback_year_discounted'] if S['payback_year_discounted'] is not None else 'Not reached'} |
 | Commercially viable | {'Yes' if S['npv_fin'] > 0 else 'No'} |
 | Socially desirable (BCR ≥ 1) | {'Yes' if S['bcr_abs'] >= 1.0 else 'No'} |
 
@@ -1111,13 +1130,21 @@ with tab_exec:
     c3.metric("NPV Social (€m)", f"{S['npv_abs']:,.0f}")
     c4.metric("NPV Financial (€m)", f"{S['npv_fin']:,.0f}")
     c5.metric("IRR incr (%)", f"{S['irr']:.1f}", help="Computed on incremental social net flows (HSR minus counterfactual).")
-    c6.metric("Payback (yr)", f"{S['payback_year']}" if S['payback_year'] else "N/A")
+    c6.metric(
+        "Payback nom. (yr)",
+        f"{S['payback_year_nominal']}" if S['payback_year_nominal'] is not None else "N/A",
+        help="Undiscounted incremental payback period based on incremental social net flows.",
+    )
 
     c7, c8, c9, c10 = st.columns(4)
     c7.metric("CAPEX total (€m)", f"{S['capex_hsr']:,.0f}")
     c8.metric("CAPEX/km (€m)", f"{S['capex_per_km']:.1f}")
     c9.metric("Eff. time saving (min)", f"{S['eff_saving_min']:.0f}")
     c10.metric("Annual OPEX (€m)", f"{S['opex_yr1']:.0f}")
+    st.caption(
+        f"Discounted payback (DPP, incr): "
+        f"{S['payback_year_discounted'] if S['payback_year_discounted'] is not None else 'N/A'} years"
+    )
 
     # Qualitative flags
     st.markdown("### Qualitative Assessment")
@@ -1165,6 +1192,7 @@ with tab_exec:
     st.markdown("---")
     st.markdown("### Reference Class Forecasting Check")
     st.caption("Flyvbjerg et al. (2002, 2005): median rail cost overrun +44.7%, demand at 48.7% of forecast")
+    st.caption("RCF CAPEX first removes your current cost-overrun uplift to recover the pre-uplift base CAPEX, then applies the Flyvbjerg median uplift of +44.7%. This replaces your overrun assumption for the RCF check; it does not stack on top of it.")
     col_rcf1, col_rcf2 = st.columns(2)
     with col_rcf1:
         adj_capex = S['capex_hsr'] * (1 + FLYVBJERG_COST_UPLIFT) / (1 + cost_overrun / 100)
@@ -1175,7 +1203,7 @@ with tab_exec:
                   delta=f"{(adj_pax - annual_pax):.1f} vs your estimate", delta_color="inverse")
     with col_rcf2:
         rcf_params = params.copy()
-        rcf_params['cost_overrun'] = ((1 + cost_overrun / 100) * (1 + FLYVBJERG_COST_UPLIFT) - 1) * 100
+        rcf_params['cost_overrun'] = FLYVBJERG_COST_UPLIFT * 100
         rcf_params['annual_pax'] = adj_pax
         S_rcf, _ = run_cba(rcf_params)
         bcr_col_rcf = "🟢" if S_rcf['bcr_abs'] >= 1 else ("🟡" if S_rcf['bcr_abs'] >= 0.7 else "🔴")
@@ -1652,7 +1680,7 @@ as these travellers were on the margin of travelling before the improvement.
 | CO₂ savings (air) | Shifted air pax | shifted_air_m × CO₂_per_mpax × CO₂_price |
 | CO₂ savings (car) | Shifted car pax | shifted_car_m × 0.4 × CO₂_per_mpax × CO₂_price |
 | Accident savings | Shifted car pax | shifted_car_m × accident_benefit_rate |
-| Congestion relief | Annual total | Fixed annual value (simplified) |
+| Congestion relief | Shifted car pax | shifted_car_m × congestion_unit, where congestion_unit is calibrated from the base year |
 | WEBs | All pax (via time) | webs_pct% × total_time_benefits |
 | Frequency/reliability | All pax (via time) | 5% × total_time_benefits (proxy) |
 """)
@@ -1666,6 +1694,8 @@ $$PV = \sum_{t=0}^{T} \frac{CF_t}{(1+r)^t}$$
 - **NPV** = PV(benefits) − PV(costs)
 - **BCR** = PV(benefits) / PV(costs)
 - **IRR (incremental)** = the discount rate at which incremental social NPV = 0 (solved numerically)
+- **Nominal payback (incremental)** = first year where cumulative **undiscounted** incremental net flow ≥ 0
+- **Discounted payback, DPP (incremental)** = first year where cumulative **discounted** incremental net flow ≥ 0
 
 **Absolute** perspective: PV(costs) includes all HSR CAPEX and OPEX.
 **Incremental** perspective: PV(costs) deducts the counterfactual CAPEX and OPEX.
@@ -1687,7 +1717,10 @@ Based on Flyvbjerg et al. (2002, 2005):
 - **Cost uplift**: median rail project cost overrun of +44.7%.
 - **Demand shortfall**: actual demand is typically 48.7% of forecast.
 
-The RCF check applies these adjustments to the user's base-case inputs and reports the adjusted BCR/NPV.
+For CAPEX, the RCF check first removes the user's current cost-overrun uplift to recover
+the pre-uplift base CAPEX, and then applies the Flyvbjerg median uplift of +44.7%.
+This means the RCF cost assumption **replaces** the user's overrun assumption rather than
+stacking on top of it. The RCF check then reports the adjusted BCR/NPV.
 """)
 
     st.markdown("### Key Limitations")
@@ -1730,6 +1763,10 @@ with tab_audit:
 **BCR** = Σ(benefits_t × df_t) / Σ(costs_t × df_t)
 
 **IRR (incremental)** = rate r* such that Σ(net_flow_incr,t / (1+r*)^t) = 0
+
+**Nominal payback (incremental)** = first t where Σ(net_flow_incr,k) from k=0..t ≥ 0
+
+**Discounted payback, DPP (incremental)** = first t where Σ(net_flow_incr,k/(1+r)^k) from k=0..t ≥ 0
         """)
 
     # Display annual data

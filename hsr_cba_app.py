@@ -114,8 +114,13 @@ def run_cba(p):
         # Accident: only car shift
         acc = shifted_car * p['accident_ben']
 
-        # Congestion
-        cong = p['congestion']
+        # Congestion is anchored to base-year car shift and scales with shifted car passengers.
+        base_shifted_car = p['annual_pax'] * car_s
+        if base_shifted_car > 0:
+            cong_unit = p['congestion'] / base_shifted_car
+            cong = shifted_car * cong_unit
+        else:
+            cong = 0
 
         # WEBs
         total_time = time_full + time_gen
@@ -366,13 +371,14 @@ with col_rcf1:
     st.markdown("### 🔍 Reference Class Forecasting Check")
     adj_capex = S['capex_hsr'] * (1 + FLYVBJERG_COST_UPLIFT) / (1 + cost_overrun/100)
     adj_pax = annual_pax * FLYVBJERG_DEMAND_FACTOR
+    st.caption("RCF CAPEX removes the current user overrun uplift, recovers pre-uplift base CAPEX, and then applies the Flyvbjerg median uplift of +44.7%. It replaces the user overrun assumption; it does not stack on top of it.")
     st.metric("RCF-adjusted CAPEX (€m)", f"{adj_capex:,.0f}", 
               delta=f"+{(adj_capex - S['capex_hsr']):,.0f} vs your estimate", delta_color="inverse")
     st.metric("RCF-adjusted demand (m pax)", f"{adj_pax:.1f}", 
               delta=f"{(adj_pax - annual_pax):.1f} vs your estimate", delta_color="inverse")
 with col_rcf2:
     rcf_params = params.copy()
-    rcf_params['cost_overrun'] = ((1+cost_overrun/100)*(1+FLYVBJERG_COST_UPLIFT)-1)*100
+    rcf_params['cost_overrun'] = FLYVBJERG_COST_UPLIFT * 100
     rcf_params['annual_pax'] = adj_pax
     S_rcf, _ = run_cba(rcf_params)
     st.markdown("### After RCF Adjustment")
