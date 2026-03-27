@@ -78,7 +78,7 @@ legal remedies under applicable intellectual property law, including:
 ## Acknowledgments
 
 Companion to:
-> Nash, C., Jandová, M., Paleta, T., & Король, K. (2026).
+> Nash, C., Jandová, M., Paleta, T., & Кról, M. (2026).
 > "When is HSR Worthwhile? Lessons from Western Europe and 
 > Implications for Central and Eastern Europe." [Publication details to follow.]
 
