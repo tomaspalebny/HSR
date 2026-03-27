@@ -1783,6 +1783,15 @@ with tab_mc:
 with tab_compare:
     st.markdown("## Corridor Comparison")
     st.caption("Runs all corridor presets through the CBA engine with your current country profile and socio-economic settings.")
+    st.caption("Method note: technical and demand parameters come from each corridor preset, while socio-economic appraisal parameters are aligned to the currently selected country profile for comparability.")
+
+    SOCIO_KEYS = {
+        'vot_biz', 'vot_com', 'vot_lei', 'vot_growth',
+        'discount', 'appraisal_yrs',
+        'co2_price', 'co2_per_mpax',
+        'accident_ben', 'congestion', 'webs_pct',
+        'cost_overrun', 'residual_pct',
+    }
 
     comp_rows = []
     for name, pdata in CORRIDOR_PRESETS.items():
@@ -1790,6 +1799,12 @@ with tab_compare:
             continue
         full_p = params.copy()
         full_p.update(pdata)
+
+        # Apply country socio-economic appraisal settings consistently across all corridors.
+        for k in SOCIO_KEYS:
+            if k in country_profile:
+                full_p[k] = country_profile[k]
+
         ss, _ = run_cba(full_p)
         comp_rows.append(dict(
             Corridor=name,
