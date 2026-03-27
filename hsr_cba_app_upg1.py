@@ -1547,7 +1547,15 @@ with tab_sens:
 
     with sens_col1:
         st.markdown("### Tornado Diagram Settings")
+        st.caption(
+            "The tornado diagram shows which assumptions have the largest impact on the selected "
+            "decision metric when each parameter is changed one at a time."
+        )
         st.caption("Select parameters to include and set the variation range.")
+        st.caption(
+            "Longer bars mean higher sensitivity. Results are based on one-way tests around the "
+            "base case (all other parameters held constant)."
+        )
         tornado_pct = st.slider("Variation range (±%)", 5, 50, 20, 5,
             help="Percentage variation applied symmetrically to each parameter.",
             key="tornado_pct")
@@ -1675,6 +1683,19 @@ with tab_mc:
         "Configure which parameters to vary, their ranges, and probability distributions. "
         "Results show the probability distribution of key CBA metrics."
     )
+    st.markdown("### Methodological remarks")
+    st.caption(
+        "This simulation is a partial-risk analysis: only selected inputs are sampled, while all "
+        "other assumptions remain fixed at base-case values."
+    )
+    st.caption(
+        "Parameter draws are independent (no correlation structure). This can understate tail risk "
+        "when adverse events co-occur, such as high CAPEX and weak demand."
+    )
+    st.caption(
+        "Triangular distributions use your base case as the mode, normal distributions use your "
+        "base case as the mean, and bounds are user-defined rather than statistically estimated."
+    )
 
     MC_PARAMS = [
         ('annual_pax', 'Demand (m pax)'),
@@ -1726,6 +1747,11 @@ with tab_mc:
         mc_col2.metric("P(NPV > 0)", f"{(mc_df['npv_abs'] > 0).mean() * 100:.1f}%")
         mc_col3.metric("Median BCR", f"{mc_df['bcr_abs'].median():.3f}")
         mc_col4.metric("P05–P95 BCR", f"{mc_df['bcr_abs'].quantile(0.05):.2f} – {mc_df['bcr_abs'].quantile(0.95):.2f}")
+
+        st.caption(
+            "Interpretation: P(BCR > 1.0) and P(NPV > 0) are scenario-based frequencies under the "
+            "assumed ranges and distributions, not objective probabilities of real-world success."
+        )
 
         mc_stat1, mc_stat2, mc_stat3, mc_stat4 = st.columns(4)
         mc_stat1.metric("Mean BCR", f"{mc_df['bcr_abs'].mean():.3f}")
