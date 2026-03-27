@@ -659,7 +659,59 @@ Generated: {now}
 | Appraisal period | {p['appraisal_yrs']} | years |
 | Residual value | {p['residual_pct']} | % of CAPEX |
 
+## How to Read the Results
+
+This report presents three complementary appraisal perspectives.
+
+### Absolute perspective
+The **absolute** perspective compares the full discounted social benefits of HSR
+with the full discounted costs of building and operating HSR.
+It answers the question: **Is the HSR project worthwhile in its own right?**
+
+- **BCR (absolute)** = PV(benefits) / PV(costs of HSR)
+- **NPV Social (absolute)** = PV(benefits) − PV(costs of HSR)
+
+A value above 1.0 for BCR, or above 0 for NPV, indicates that the project
+creates net social value.
+
+### Incremental perspective
+The **incremental** perspective compares HSR with the explicit counterfactual,
+usually an upgrade of the existing line.
+It answers the question: **Is HSR better than the upgrade alternative?**
+
+- **BCR (incremental)** = PV(benefits of HSR) / PV(incremental costs of HSR relative to the counterfactual)
+- **NPV Social (incremental)** = PV(benefits of HSR) − PV(incremental costs)
+
+This perspective is especially important when a substantial conventional-rail
+alternative already exists.
+
+### Financial perspective
+The financial metric is separate from the social appraisal.
+
+- **NPV Financial** = PV(revenue) − PV(costs of HSR)
+
+A project may be socially desirable but financially unprofitable, because many
+benefits such as time savings, safety, emissions, congestion relief, and WEBs
+accrue to society rather than to the operator.
+
 ## Methodology
+
+### Welfare-Economic Logic
+The model follows standard welfare-economic social cost-benefit analysis.
+Social appraisal counts resource costs and social benefits regardless of who
+receives them. Therefore, user benefits (time savings), safety gains,
+environmental effects, congestion relief, and wider economic benefits are
+included in the social case.
+
+Fare revenue is not treated as a social benefit in the core BCR, because it is
+largely a transfer from users to the operator rather than a net gain to society.
+It is therefore reported separately in the financial appraisal.
+
+### Why the Counterfactual Matters
+HSR is rarely evaluated against "do nothing" alone. In most real-world
+appraisals, the relevant question is whether HSR performs better than a plausible
+alternative, such as upgrading the conventional line. The incremental indicators
+therefore isolate the additional cost of choosing HSR over that alternative.
 
 ### Demand Model
 Ridership grows at a constant compound rate from the base-year figure.
@@ -694,6 +746,11 @@ time-benefit stream.
 All future cash flows are discounted at the social discount rate.
 `NPV = PV(benefits) − PV(costs)`. BCR = PV(benefits) / PV(costs).
 
+Future costs and benefits are discounted to reflect time preference and the
+opportunity cost of public funds. A euro of benefit received far in the future
+is therefore worth less than a euro received today. This is why long-lived rail
+projects are sensitive to the appraisal period, discount rate, and residual value.
+
 **Absolute perspective**: compares total HSR costs with total benefits.
 **Incremental perspective**: deducts counterfactual costs from HSR costs.
 
@@ -709,6 +766,13 @@ credited as residual (net of counterfactual residual).
 Internal Rate of Return here is computed on **incremental social net flows**
 (HSR minus counterfactual), i.e. it is aligned with the incremental perspective.
 It is solved numerically via bisection.
+
+### Interpretation of IRR and Payback
+IRR is computed from incremental net social flows relative to the counterfactual.
+Nominal payback is the first year in which cumulative undiscounted incremental
+net social flows become non-negative, while discounted payback (DPP) applies the
+social discount rate to those same flows. Both are simple heuristics and should
+be interpreted alongside NPV and BCR, not as substitutes for them.
 
 ## Base-Case Results
 | Metric | Value |
@@ -1135,6 +1199,23 @@ with tab_exec:
         f"{S['payback_year_nominal']}" if S['payback_year_nominal'] is not None else "N/A",
         help="Undiscounted incremental payback period based on incremental social net flows.",
     )
+    st.caption(
+        "Social BCR (abs) = PV of all social benefits divided by PV of all HSR costs. "
+        "It indicates whether the project is socially worthwhile in its own right."
+    )
+    st.caption(
+        "Social BCR (incr) = PV of social benefits divided by the additional cost of HSR "
+        "relative to the counterfactual, usually an upgrade of the conventional line. "
+        "It indicates whether HSR is preferable to that alternative."
+    )
+    st.caption(
+        "NPV Social compares social benefits with social costs, while NPV Financial compares "
+        "operator revenue with HSR costs and therefore excludes most external benefits to society."
+    )
+    st.caption(
+        "IRR is computed from incremental social flows relative to the counterfactual. "
+        "Payback nom. is undiscounted; discounted payback (DPP) is shown separately below."
+    )
 
     c7, c8, c9, c10 = st.columns(4)
     c7.metric("CAPEX total (€m)", f"{S['capex_hsr']:,.0f}")
@@ -1168,6 +1249,10 @@ with tab_exec:
             st.success("✅ Better than upgrade (incr BCR ≥ 1)")
         else:
             st.warning("⚠️ Upgrade may be preferable (incr BCR < 1)")
+    st.caption(
+        "Green/yellow/red flags are indicative heuristics only. Formal decisions should also consider "
+        "sensitivity tests, RCF results, and the quality of the input assumptions."
+    )
 
     # BCR gauge
     fig_gauge = go.Figure(go.Indicator(
@@ -1187,12 +1272,17 @@ with tab_exec:
     ))
     fig_gauge.update_layout(height=250, margin=dict(t=80, b=20, l=40, r=40))
     st.plotly_chart(fig_gauge, use_container_width=True)
+    st.caption(
+        "The gauge shows the absolute social BCR. The 1.0 threshold means discounted social benefits "
+        "exactly cover discounted HSR costs."
+    )
 
     # Reference Class Forecasting
     st.markdown("---")
     st.markdown("### Reference Class Forecasting Check")
     st.caption("Flyvbjerg et al. (2002, 2005): median rail cost overrun +44.7%, demand at 48.7% of forecast")
     st.caption("RCF CAPEX first removes your current cost-overrun uplift to recover the pre-uplift base CAPEX, then applies the Flyvbjerg median uplift of +44.7%. This replaces your overrun assumption for the RCF check; it does not stack on top of it.")
+    st.caption("RCF is a conservative robustness check: it replaces an optimistic base case with empirically observed deviations from comparable rail projects.")
     col_rcf1, col_rcf2 = st.columns(2)
     with col_rcf1:
         adj_capex = S['capex_hsr'] * (1 + FLYVBJERG_COST_UPLIFT) / (1 + cost_overrun / 100)
@@ -1217,6 +1307,7 @@ with tab_exec:
 # ──────────────────────────────────────────
 with tab_detail:
     st.markdown("## PV Breakdown (€m)")
+    st.caption("PV means present value: future costs and benefits discounted back to today's value using the social discount rate.")
 
     col_b, col_c = st.columns(2)
     with col_b:
@@ -1303,6 +1394,7 @@ with tab_detail:
     # Threshold analysis
     st.markdown("### Threshold Analysis — Break-even for BCR = 1.0")
     st.caption("Each threshold is computed holding all other parameters at current values.")
+    st.caption("Thresholds are ceteris paribus: only one parameter changes at a time while all others remain fixed.")
     st.caption("`N/A` means BCR = 1.0 is outside the tested range for that parameter.")
     th1, th2, th3, th4 = st.columns(4)
     try:
@@ -1744,6 +1836,7 @@ with tab_audit:
         "Complete year-by-year breakdown of all CBA components. "
         "Download as CSV for external audit or replication."
     )
+    st.caption("The audit trail shows the annual building blocks from which the summary NPV, BCR, IRR, and payback indicators are derived.")
 
     # Show key formulas
     with st.expander("📐 Formulas used in this model"):
