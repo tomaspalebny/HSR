@@ -471,17 +471,45 @@ def _irr_manual(flows):
 
 
 def threshold_search(p, param, lo, hi, target_bcr=1.0, incremental=False):
-    """Binary search for the value of `param` that yields BCR = target_bcr."""
+    """Binary search for the value of `param` that yields BCR = target_bcr.
+
+    Returns None when the target is not bracketed within [lo, hi].
+    Assumes BCR changes monotonically over the tested interval.
+    """
+    def eval_bcr(value):
+        pp = p.copy()
+        pp[param] = value
+        s, _ = run_cba(pp)
+        return s['bcr_incr'] if incremental else s['bcr_abs']
+
+    bcr_lo = eval_bcr(lo)
+    bcr_hi = eval_bcr(hi)
+
+    if abs(bcr_lo - target_bcr) < 1e-9:
+        return lo
+    if abs(bcr_hi - target_bcr) < 1e-9:
+        return hi
+
+    min_bcr = min(bcr_lo, bcr_hi)
+    max_bcr = max(bcr_lo, bcr_hi)
+    if target_bcr < min_bcr or target_bcr > max_bcr:
+        return None
+
+    increasing = bcr_hi > bcr_lo
+
     for _ in range(60):
         mid = (lo + hi) / 2
-        pp = p.copy()
-        pp[param] = mid
-        s, _ = run_cba(pp)
-        bcr = s['bcr_incr'] if incremental else s['bcr_abs']
-        if bcr < target_bcr:
-            lo = mid
+        bcr_mid = eval_bcr(mid)
+        if increasing:
+            if bcr_mid < target_bcr:
+                lo = mid
+            else:
+                hi = mid
         else:
-            hi = mid
+            if bcr_mid < target_bcr:
+                hi = mid
+            else:
+                lo = mid
     return (lo + hi) / 2
 
 
@@ -1227,26 +1255,30 @@ with tab_detail:
     # Threshold analysis
     st.markdown("### Threshold Analysis — Break-even for BCR = 1.0")
     st.caption("Each threshold is computed holding all other parameters at current values.")
+    st.caption("`N/A` means BCR = 1.0 is outside the tested range for that parameter.")
     th1, th2, th3, th4 = st.columns(4)
     try:
         th_pax = threshold_search(params, 'annual_pax', 0.5, 80, 1.0)
-        th1.metric("Min. annual pax (m)", f"{th_pax:.1f}")
+        th1.metric("Min. annual pax (m)", f"{th_pax:.1f}" if th_pax is not None else "N/A")
     except Exception:
         th1.metric("Min. annual pax (m)", "N/A")
     try:
         th_cost = threshold_search(params, 'cost_at_grade', 1, 200, 1.0)
-        th2.metric("Max. at-grade cost (€m/km)", f"{th_cost:.1f}")
+        th2.metric("Max. at-grade cost (€m/km)", f"{th_cost:.1f}" if th_cost is not None else "N/A")
     except Exception:
         th2.metric("Max. at-grade cost (€m/km)", "N/A")
     try:
         th_time = threshold_search(params, 'hsr_time', 1, 300, 1.0)
-        th_save = (upgrade_time + access_egress_conv) - (th_time + access_egress_hsr)
-        th3.metric("Min. eff. time saving (min)", f"{max(0, th_save):.0f}")
+        if th_time is None:
+            th3.metric("Min. eff. time saving (min)", "N/A")
+        else:
+            th_save = (upgrade_time + access_egress_conv) - (th_time + access_egress_hsr)
+            th3.metric("Min. eff. time saving (min)", f"{max(0, th_save):.0f}")
     except Exception:
         th3.metric("Min. eff. time saving (min)", "N/A")
     try:
         th_vot = threshold_search(params, 'vot_biz', 5, 200, 1.0)
-        th4.metric("Min. VOT business (€/hr)", f"{th_vot:.0f}")
+        th4.metric("Min. VOT business (€/hr)", f"{th_vot:.0f}" if th_vot is not None else "N/A")
     except Exception:
         th4.metric("Min. VOT business (€/hr)", "N/A")
 
