@@ -871,10 +871,18 @@ with st.sidebar:
     )
     corridor_preset = CORRIDOR_PRESETS.get(corridor_name, {})
 
-    # Merge: corridor overrides country, user overrides both
+    # Merge: corridor provides technical/demand defaults;
+    # country profile always wins on socio-economic appraisal parameters.
+    SOCIO_KEYS = {
+        'vot_biz', 'vot_com', 'vot_lei', 'vot_growth',
+        'discount', 'appraisal_yrs',
+        'co2_price', 'co2_per_mpax',
+        'accident_ben', 'congestion', 'webs_pct',
+        'cost_overrun', 'residual_pct',
+    }
     merged_preset = {}
-    merged_preset.update(country_profile)
-    merged_preset.update(corridor_preset)
+    merged_preset.update(corridor_preset)   # start with corridor (technical + its socio values)
+    merged_preset.update(country_profile)   # country profile overwrites all its keys (socio-economic)
 
     def pv(key):
         """Get effective default: preset > DEFAULTS."""
