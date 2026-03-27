@@ -802,6 +802,31 @@ be interpreted alongside NPV and BCR, not as substitutes for them.
 | Commercially viable | {'Yes' if S['npv_fin'] > 0 else 'No'} |
 | Socially desirable (BCR ≥ 1) | {'Yes' if S['bcr_abs'] >= 1.0 else 'No'} |
 
+### Interpreting absolute vs incremental BCR
+
+The absolute social benefit-cost ratio (BCR, abs) compares the full present value of social
+benefits of the HSR project with the full present value of its construction and operating costs.
+In the current configuration, BCR (absolute) is {S['bcr_abs']:.3f}, which indicates that as a
+stand-alone project the HSR line does not generate enough discounted benefits to cover its
+discounted costs.
+
+The incremental social BCR (BCR, incr) compares the same stream of social benefits with the
+additional costs of HSR relative to the explicit counterfactual (usually a conventional rail upgrade).
+A value below 1.0 likewise indicates that the upgrade remains the welfare-superior option: the
+extra step from the upgrade to HSR does not produce sufficient additional benefits to justify
+its additional costs.
+
+It is therefore entirely possible - and in this case observed - that BCR (incr) exceeds BCR (abs)
+while both remain below 1.0. This pattern simply reflects that some investment and operating
+costs would be incurred under the upgrade in any case, so the marginal return on extra HSR
+spending is somewhat better than the average return on the full HSR package, but still
+insufficient to pass the standard decision threshold.
+
+From a decision-making perspective, these results suggest that, given the current assumptions,
+the conventional upgrade is preferred on pure social cost-benefit grounds. Any argument in
+favour of HSR would need to rely on factors not fully captured in the quantified appraisal
+(e.g. strategic network considerations, real-options value, political or distributional objectives).
+
 ### PV Breakdown (€m)
 | Component | PV (€m) |
 |-----------|---------|
@@ -1254,6 +1279,32 @@ with tab_exec:
     st.caption(
         f"Discounted payback (DPP, incr): "
         f"{S['payback_year_discounted'] if S['payback_year_discounted'] is not None else 'N/A'} years"
+    )
+
+    st.markdown("### Interpretation of base-case ratios")
+    st.caption(
+        "Social BCR (absolute) compares all discounted social benefits of HSR with all "
+        "discounted HSR costs. "
+        f"A value below 1.0 (here {S['bcr_abs']:.3f}) means that, as a stand-alone "
+        "project, HSR does not recover its social costs."
+    )
+    st.caption(
+        "Social BCR (incremental) compares the same social benefits with the additional "
+        "costs of HSR relative to the upgrade counterfactual. "
+        f"A value below 1.0 (here {format_bcr(S['bcr_incr'])}) indicates that the "
+        "upgrade remains the welfare-superior option; the extra step from upgrade to "
+        "HSR does not generate enough extra benefits to justify its extra costs."
+    )
+    st.caption(
+        "The fact that the incremental BCR is higher than the absolute BCR is not inconsistent. "
+        "It reflects that some costs would be incurred anyway under the upgrade, so the "
+        "marginal bang-for-buck of the HSR increment can be better than the average return "
+        "of the full HSR package, while still below the threshold of 1.0."
+    )
+    st.caption(
+        "In this configuration, both ratios below 1.0 suggest that, on pure social cost-benefit "
+        "grounds, the conventional upgrade is preferable. Any case for HSR would need to rely "
+        "on additional strategic or non-monetised considerations."
     )
 
     # Qualitative flags
