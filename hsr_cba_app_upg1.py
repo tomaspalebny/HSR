@@ -47,6 +47,14 @@ import io, textwrap, datetime
 
 st.set_page_config(page_title="HSR CBA Analyser", layout="wide", page_icon="🚄")
 
+
+def is_defined_metric(value):
+    return value is not None and not pd.isna(value)
+
+
+def format_bcr(value, digits=3):
+    return f"{value:.{digits}f}" if is_defined_metric(value) else "N/A"
+
 # ════════════════════════════════════════════════════════════════
 # LABELS & UNITS (centralised for future i18n)
 # ════════════════════════════════════════════════════════════════
@@ -420,7 +428,7 @@ def run_cba(p):
     S['pv_benefits'] = df_all['pv_benefits'].sum()
 
     S['bcr_abs'] = S['pv_benefits'] / S['pv_costs_abs'] if S['pv_costs_abs'] > 0 else 0
-    S['bcr_incr'] = S['pv_benefits'] / S['pv_costs_incr'] if S['pv_costs_incr'] > 0 else 0
+    S['bcr_incr'] = S['pv_benefits'] / S['pv_costs_incr'] if S['pv_costs_incr'] > 0 else None
     S['npv_abs'] = S['pv_benefits'] - S['pv_costs_abs']
     S['npv_incr'] = S['pv_benefits'] - S['pv_costs_incr']
     S['npv_fin'] = S['pv_revenue'] - S['pv_costs_abs']
@@ -485,6 +493,9 @@ def threshold_search(p, param, lo, hi, target_bcr=1.0, incremental=False):
     bcr_lo = eval_bcr(lo)
     bcr_hi = eval_bcr(hi)
 
+    if bcr_lo is None or bcr_hi is None:
+        return None
+
     if abs(bcr_lo - target_bcr) < 1e-9:
         return lo
     if abs(bcr_hi - target_bcr) < 1e-9:
@@ -500,6 +511,8 @@ def threshold_search(p, param, lo, hi, target_bcr=1.0, incremental=False):
     for _ in range(60):
         mid = (lo + hi) / 2
         bcr_mid = eval_bcr(mid)
+        if bcr_mid is None:
+            return None
         if increasing:
             if bcr_mid < target_bcr:
                 lo = mid
@@ -666,6 +679,10 @@ All future cash flows are discounted at the social discount rate.
 **Absolute perspective**: compares total HSR costs with total benefits.
 **Incremental perspective**: deducts counterfactual costs from HSR costs.
 
+If incremental PV costs are non-positive ($PV_{{costs,incr}} \le 0$), incremental BCR is
+reported as `N/A` because the ratio is not economically interpretable in that case.
+Interpretation should rely on incremental NPV instead.
+
 ### Residual Value
 At the end of the appraisal period, a percentage of original CAPEX is
 credited as residual (net of counterfactual residual).
@@ -681,7 +698,7 @@ numerically via bisection.
 | NPV Social (incremental) | {S['npv_incr']:,.0f} €m |
 | NPV Financial | {S['npv_fin']:,.0f} €m |
 | BCR (absolute) | {S['bcr_abs']:.3f} |
-| BCR (incremental) | {S['bcr_incr']:.3f} |
+| BCR (incremental) | {format_bcr(S['bcr_incr'])} |
 | IRR | {S['irr']:.1f}% |
 | Payback year | {S['payback_year'] if S['payback_year'] else 'Not reached'} |
 | Commercially viable | {'Yes' if S['npv_fin'] > 0 else 'No'} |
@@ -1089,7 +1106,7 @@ with tab_exec:
     c1, c2, c3, c4, c5, c6 = st.columns(6)
     bcr_emoji = "🟢" if S['bcr_abs'] >= 1 else ("🟡" if S['bcr_abs'] >= 0.7 else "🔴")
     c1.metric("Social BCR (abs)", f"{bcr_emoji} {S['bcr_abs']:.3f}")
-    c2.metric("Social BCR (incr)", f"{S['bcr_incr']:.3f}")
+    c2.metric("Social BCR (incr)", format_bcr(S['bcr_incr']))
     c3.metric("NPV Social (€m)", f"{S['npv_abs']:,.0f}")
     c4.metric("NPV Financial (€m)", f"{S['npv_fin']:,.0f}")
     c5.metric("IRR (%)", f"{S['irr']:.1f}")
@@ -1117,7 +1134,9 @@ with tab_exec:
         else:
             st.warning("⚠️ Requires subsidy (NPV fin < 0)")
     with flags_col3:
-        if S['bcr_incr'] >= 1.0:
+        if not is_defined_metric(S['bcr_incr']):
+            st.info("ℹ️ Incremental BCR not meaningful when incremental PV costs are non-positive.")
+        elif S['bcr_incr'] >= 1.0:
             st.success("✅ Better than upgrade (incr BCR ≥ 1)")
         else:
             st.warning("⚠️ Upgrade may be preferable (incr BCR < 1)")
@@ -1161,7 +1180,7 @@ with tab_exec:
         bcr_col_rcf = "🟢" if S_rcf['bcr_abs'] >= 1 else ("🟡" if S_rcf['bcr_abs'] >= 0.7 else "🔴")
         st.metric("RCF Social BCR (absolute)", f"{bcr_col_rcf} {S_rcf['bcr_abs']:.3f}")
         st.metric("RCF Social NPV (€m)", f"{S_rcf['npv_abs']:,.0f}")
-        st.metric("RCF Social BCR (incremental)", f"{S_rcf['bcr_incr']:.3f}")
+        st.metric("RCF Social BCR (incremental)", format_bcr(S_rcf['bcr_incr']))
 
 
 # ──────────────────────────────────────────
@@ -1395,42 +1414,53 @@ with tab_sens:
                 val = ss['npv_abs']
             t_data.append(dict(param=label, direction=direction, value=val))
 
-    if t_data:
+    if sens_metric == "BCR (incremental)" and not is_defined_metric(base_bcr_incr):
+        st.info("Incremental BCR tornado is unavailable when incremental PV costs are non-positive in the base case.")
+    elif t_data:
         t_df = pd.DataFrame(t_data)
-        pivot = t_df.pivot(index='param', columns='direction', values='value').reset_index()
-        pivot['range'] = abs(pivot['high'] - pivot['low'])
-        pivot = pivot.sort_values('range', ascending=True)
+        if sens_metric == "BCR (incremental)":
+            t_df = t_df.dropna(subset=['value'])
+            valid_params = t_df.groupby('param')['direction'].nunique()
+            valid_params = valid_params[valid_params == 2].index
+            t_df = t_df[t_df['param'].isin(valid_params)]
 
-        if sens_metric == "BCR (absolute)":
-            base_val = base_bcr
-            x_title = "Social BCR (absolute)"
-        elif sens_metric == "BCR (incremental)":
-            base_val = base_bcr_incr
-            x_title = "Social BCR (incremental)"
+        if t_df.empty:
+            st.info("No valid incremental BCR points are available in the tested sensitivity range.")
         else:
-            base_val = base_npv
-            x_title = "Social NPV (€m)"
+            pivot = t_df.pivot(index='param', columns='direction', values='value').reset_index()
+            pivot['range'] = abs(pivot['high'] - pivot['low'])
+            pivot = pivot.sort_values('range', ascending=True)
 
-        fig_torn = go.Figure()
-        fig_torn.add_trace(go.Bar(
-            y=pivot['param'], x=pivot['low'] - base_val, base=base_val,
-            orientation='h', name=f'−{tornado_pct}%', marker_color='#1FBFAE',
-        ))
-        fig_torn.add_trace(go.Bar(
-            y=pivot['param'], x=pivot['high'] - base_val, base=base_val,
-            orientation='h', name=f'+{tornado_pct}%', marker_color='#20B2FF',
-        ))
-        fig_torn.add_vline(x=base_val, line_dash="dash", line_color="white")
-        if "BCR" in sens_metric:
-            fig_torn.add_vline(x=1.0, line_dash="dot", line_color="#FF6B6B")
-        else:
-            fig_torn.add_vline(x=0, line_dash="dot", line_color="#FF6B6B")
-        fig_torn.update_layout(
-            barmode='overlay', height=max(400, len(selected_tornado) * 28),
-            legend=dict(orientation='h', y=1.05),
-            xaxis_title=x_title, margin=dict(l=10),
-        )
-        st.plotly_chart(fig_torn, use_container_width=True)
+            if sens_metric == "BCR (absolute)":
+                base_val = base_bcr
+                x_title = "Social BCR (absolute)"
+            elif sens_metric == "BCR (incremental)":
+                base_val = base_bcr_incr
+                x_title = "Social BCR (incremental)"
+            else:
+                base_val = base_npv
+                x_title = "Social NPV (€m)"
+
+            fig_torn = go.Figure()
+            fig_torn.add_trace(go.Bar(
+                y=pivot['param'], x=pivot['low'] - base_val, base=base_val,
+                orientation='h', name=f'−{tornado_pct}%', marker_color='#1FBFAE',
+            ))
+            fig_torn.add_trace(go.Bar(
+                y=pivot['param'], x=pivot['high'] - base_val, base=base_val,
+                orientation='h', name=f'+{tornado_pct}%', marker_color='#20B2FF',
+            ))
+            fig_torn.add_vline(x=base_val, line_dash="dash", line_color="white")
+            if "BCR" in sens_metric:
+                fig_torn.add_vline(x=1.0, line_dash="dot", line_color="#FF6B6B")
+            else:
+                fig_torn.add_vline(x=0, line_dash="dot", line_color="#FF6B6B")
+            fig_torn.update_layout(
+                barmode='overlay', height=max(400, len(pivot) * 28),
+                legend=dict(orientation='h', y=1.05),
+                xaxis_title=x_title, margin=dict(l=10),
+            )
+            st.plotly_chart(fig_torn, use_container_width=True)
     else:
         st.info("Select at least one parameter for the tornado diagram.")
 
@@ -1551,7 +1581,7 @@ with tab_compare:
     st.dataframe(
         comp_df[available_cols].rename(columns=rename).style.format({
             'CAPEX (€m)': '{:,.0f}', '€m/km': '{:.1f}', 'BCR abs': '{:.3f}',
-            'BCR incr': '{:.3f}', 'NPV soc (€m)': '{:,.0f}', 'NPV fin (€m)': '{:,.0f}',
+            'BCR incr': lambda v: format_bcr(v), 'NPV soc (€m)': '{:,.0f}', 'NPV fin (€m)': '{:,.0f}',
             'IRR (%)': '{:.1f}', 'Eff. Δt (min)': '{:.0f}', 'OPEX yr1 (€m)': '{:.0f}',
         }),
         use_container_width=True, height=600,
@@ -1638,6 +1668,10 @@ $$PV = \sum_{t=0}^{T} \frac{CF_t}{(1+r)^t}$$
 
 **Absolute** perspective: PV(costs) includes all HSR CAPEX and OPEX.
 **Incremental** perspective: PV(costs) deducts the counterfactual CAPEX and OPEX.
+
+If incremental PV costs are non-positive ($PV_{costs,incr} \le 0$), incremental BCR is
+reported as `N/A` because the ratio is not economically interpretable in that case.
+Interpretation should rely on incremental NPV instead.
 """)
 
     st.markdown("### Residual Value")

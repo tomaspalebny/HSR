@@ -6,6 +6,14 @@ import plotly.express as px
 
 st.set_page_config(page_title="HSR CBA Analyser", layout="wide", page_icon="🚄")
 
+
+def is_defined_metric(value):
+    return value is not None and not pd.isna(value)
+
+
+def format_bcr(value, digits=3):
+    return f"{value:.{digits}f}" if is_defined_metric(value) else "N/A"
+
 # ============================================================
 # PRESETS
 # ============================================================
@@ -168,7 +176,7 @@ def run_cba(p):
     S['pv_benefits'] = df_all['pv_benefits'].sum()
 
     S['bcr_abs'] = S['pv_benefits'] / S['pv_costs_abs'] if S['pv_costs_abs'] > 0 else 0
-    S['bcr_incr'] = S['pv_benefits'] / S['pv_costs_incr'] if S['pv_costs_incr'] > 0 else 0
+    S['bcr_incr'] = S['pv_benefits'] / S['pv_costs_incr'] if S['pv_costs_incr'] > 0 else None
     S['npv_abs'] = S['pv_benefits'] - S['pv_costs_abs']
     S['npv_incr'] = S['pv_benefits'] - S['pv_costs_incr']
     S['npv_fin'] = S['pv_revenue'] - S['pv_costs_abs']
@@ -189,6 +197,9 @@ def threshold_search(p, param, lo, hi, target_bcr=1.0, incremental=False):
     bcr_lo = eval_bcr(lo)
     bcr_hi = eval_bcr(hi)
 
+    if bcr_lo is None or bcr_hi is None:
+        return None
+
     if abs(bcr_lo - target_bcr) < 1e-9:
         return lo
     if abs(bcr_hi - target_bcr) < 1e-9:
@@ -204,6 +215,8 @@ def threshold_search(p, param, lo, hi, target_bcr=1.0, incremental=False):
     for _ in range(60):
         mid = (lo + hi) / 2
         bcr_mid = eval_bcr(mid)
+        if bcr_mid is None:
+            return None
         if increasing:
             if bcr_mid < target_bcr:
                 lo = mid
@@ -374,7 +387,7 @@ st.markdown("---")
 c1, c2, c3, c4, c5, c6 = st.columns(6)
 bcr_emoji = "🟢" if S['bcr_abs'] >= 1 else ("🟡" if S['bcr_abs'] >= 0.7 else "🔴")
 c1.metric("Social BCR (abs)", f"{bcr_emoji} {S['bcr_abs']:.3f}")
-c2.metric("Social BCR (incr)", f"{S['bcr_incr']:.3f}")
+c2.metric("Social BCR (incr)", format_bcr(S['bcr_incr']))
 c3.metric("NPV Social abs (€m)", f"{S['npv_abs']:,.0f}")
 c4.metric("NPV Financial (€m)", f"{S['npv_fin']:,.0f}")
 c5.metric("CAPEX total (€m)", f"{S['capex_hsr']:,.0f}")
@@ -586,7 +599,7 @@ display_cols = ['Corridor','capex_hsr','capex_per_km','bcr_abs','bcr_incr','npv_
 rename = {'capex_hsr':'CAPEX (€m)','capex_per_km':'€m/km','bcr_abs':'BCR abs','bcr_incr':'BCR incr',
           'npv_abs':'NPV soc (€m)','npv_fin':'NPV fin (€m)','eff_saving_min':'Eff. Δt (min)','opex_yr1':'OPEX yr1 (€m)'}
 st.dataframe(comp_df[display_cols].rename(columns=rename).style.format({
-    'CAPEX (€m)': '{:,.0f}', '€m/km': '{:.1f}', 'BCR abs': '{:.3f}', 'BCR incr': '{:.3f}',
+    'CAPEX (€m)': '{:,.0f}', '€m/km': '{:.1f}', 'BCR abs': '{:.3f}', 'BCR incr': lambda v: format_bcr(v),
     'NPV soc (€m)': '{:,.0f}', 'NPV fin (€m)': '{:,.0f}', 'Eff. Δt (min)': '{:.0f}', 'OPEX yr1 (€m)': '{:.0f}'
 }).apply(lambda x: ['background-color: #1a3a2a' if isinstance(v, (int,float)) and v >= 1 else '' 
                      for v in x] if x.name in ['BCR abs','BCR incr'] else ['']*len(x)), 
