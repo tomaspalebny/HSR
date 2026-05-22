@@ -1,0 +1,52 @@
+{
+  "project": "Technical Paper - HSR Social CBA Sensitivity Analyser v4.0",
+  "target_file": "/home/tomaspaleta/Documents/GitHub/HSR/technical_paper.md",
+  "status": "completed",
+  "created": "2026-04-27",
+  "last_updated": "2026-04-27",
+  "phases": {
+    "1_read_source": {
+      "status": "completed",
+      "notes": "Full 2202-line hsr_cba_app_upg2.py read via subagent. Complete structured summary obtained."
+    },
+    "2_research_citations": {
+      "status": "completed",
+      "notes": "Citations from code CITATIONS dict + supplementary DOI searches completed. | VERIFICATION DONE: Flyvbjerg cost=44.7% MATCH; demand=48.7% MISMATCH (should be 51.4%/0.514) - corrected in paper; UK VOT leisure €14 too high vs £6.60/hr≈€7.6 - documented with explanation; discount rates, CO2 prices verified OK."
+    },
+    "3_write_paper": {
+      "status": "completed",
+      "current_section": null,
+      "notes": "Full draft written to technical_paper.md (~34KB). All sections covered."
+    },
+    "4_review_finalize": {
+      "status": "completed",
+      "notes": ""
+    }
+  },
+  "gathered_data": {
+    "source_summary": "Streamlit-based social CBA tool for HSR projects. Strictly incremental vs counterfactual. Features: NPV/BCR/IRR/payback, RCF (Flyvbjerg), spend profiles, tornado sensitivity, Monte Carlo, threshold/break-even analysis, corridor comparison, audit trail. 15 corridor presets, 10 country profiles. 6 toggleable benefit components. Companion to Nash et al. 2026 paper.",
+    "citations_in_code": [
+      "Flyvbjerg et al. 2002 JAPA cost overruns",
+      "Flyvbjerg et al. 2005 JAPA demand forecasts",
+      "EC 2020 Handbook External Costs Transport",
+      "HEATCO 2006 FP6 D5",
+      "UK DfT 2023 TAG VOT A1.3",
+      "HM Treasury 2022 Green Book",
+      "CGEDD 2020 Valeur du temps",
+      "SACTRA 1999 Transport and Economy",
+      "Venables 2007 JTEP WEBs",
+      "Graham 2007 ITF/OECD agglomeration",
+      "UIC 2018 HSR benchmarks",
+      "Nash et al. 2026 under review",
+      "EEA 2023 transport emissions",
+      "UK DESNZ 2023 GHG valuation",
+      "INFRAS/IWW 2004 external costs UIC",
+      "OECD 2022 CBA environment",
+      "ITF 2023 Transport Outlook",
+      "COWI 2004 congestion EC DG TREN",
+      "ADEME 2023 emission factors",
+      "de Vos 2014 Dutch rail cost overruns",
+      "Elmaghraby & Kabadayi 2022 demand forecasting review"
+    ]
+  }
+}

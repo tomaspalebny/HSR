@@ -89,7 +89,6 @@ PARAM_META = {
     "cost_rolling":     ("Rolling stock",        "€m",       "Cost of new train fleet. Zero if operator-supplied.", "cost"),
     "cost_overrun":     ("Cost overrun uplift",  "%",        "Percentage uplift applied to base CAPEX to account for optimism bias.", "cost"),
     "constr_years":     ("Construction period",  "yr",       "Years from ground-breaking to service start.", "cost"),
-    "spend_profile":    ("", "", "Distribution of CAPEX across construction years.", "cost"),
     "counterfactual_capex":("Upgrade CAPEX",     "€m",       "Total capital cost of the counterfactual rail upgrade.", "cost"),
     "counterfactual_opex_yr":("Upgrade OPEX/yr", "€m",       "Annual operating cost of the counterfactual.", "cost"),
     "opex_infra_maint": ("Infra maintenance",    "€m/km/yr", "Annual infrastructure maintenance per route-km. Typical: 0.03–0.12.", "cost"),
@@ -220,30 +219,6 @@ CORRIDOR_PRESETS = {
 FLYVBJERG_COST_UPLIFT = 0.447   # Flyvbjerg et al. (2002): median rail cost overrun
 FLYVBJERG_DEMAND_FACTOR = 0.487 # Flyvbjerg et al. (2005): median demand shortfall
 
-CITATIONS = {
-    "flyvbjerg_cost": "Flyvbjerg, Holm & Buhl (2002), 'Underestimating Costs in Public Works Projects: Error or Lie?', Journal of the American Planning Association, 68(3), 279–295.",
-    "flyvbjerg_demand": "Flyvbjerg, Holm & Buhl (2005), 'How (In)accurate Are Demand Forecasts in Public Works Projects?', Journal of the American Planning Association, 71(2), 131–146.",
-    "eu_handbook_ext": "European Commission (2020), 'Handbook on the External Costs of Transport', Version 2020-1, DG MOVE.",
-    "heatco": "HEATCO (2006), 'Developing Harmonised European Approaches for Transport Costing and Project Assessment', FP6 project, deliverable D5.",
-    "uk_tag_vot": "UK Department for Transport (2023), 'Transport Analysis Guidance: Values of Travel Time Savings', TAG Unit A1.3.",
-    "uk_greenbook": "HM Treasury (2022), 'The Green Book: Central Government Guidance on Appraisal and Evaluation'.",
-    "fr_cgedd_vot": "CGEDD / CGE (2020), 'Valeur du temps et prix implicites dans les déplacements', Rapport no. 012593-01.",
-    "sactra_webs": "SACTRA (1999), 'Transport and the Economy', Standing Advisory Committee on Trunk Road Assessment, UK DETR.",
-    "venables_webs": "Venables, A.J. (2007), 'Evaluating Urban Transport Improvements: Cost–Benefit Analysis in the Presence of Agglomeration and Income Taxation', Journal of Transport Economics and Policy, 41(2), 173–188.",
-    "graham_webs": "Graham, D.J. (2007), 'Agglomeration Economies and Transport Investment', Discussion Paper 2007-11, ITF/OECD.",
-    "uic_costs": "UIC (2018), 'High Speed Rail: Fast Track to Sustainable Mobility', International Union of Railways, Paris.",
-    "nash_cee": "Nash, C.A., Jandová, M., Paleta, T. & Król, M. (2026), 'When is HSR Worthwhile? Lessons from Western Europe and Implications for Central and Eastern Europe', [under review].",
-    "eea_co2": "European Environment Agency (2023), 'Transport emissions of air pollutants', EEA Indicator CSI 004.",
-    "defra_co2": "UK DESNZ (2023), 'Green Book supplementary guidance: valuation of energy use and greenhouse gas emissions for appraisal', Table 3.",
-    "infras_iww": "INFRAS/IWW (2004), 'External Costs of Transport: Update Study', Final Report for the International Union of Railways (UIC).",
-    "oecd_scc": "OECD (2022), 'Cost–Benefit Analysis and the Environment: Further Developments and Policy Use', OECD Publishing, Paris.",
-    "itf_outlook": "ITF (2023), 'ITF Transport Outlook 2023', OECD Publishing, Paris.",
-    "cowi_congestion": "COWI (2004), 'Cost–Benefit Analysis and Overloads on the Road Network', Final Report for the European Commission, DG TREN.",
-    "ademe_co2": "ADEME (2023), 'Bilans GES: Facteurs d'émission', Agence de la Transition Écologique, France.",
-    "de_vos_construction": "de Vos, P. (2014), 'Appraisal of Large Transport Projects: An Analysis of Construction Cost Overruns in Dutch Rail Infrastructure', Proceedings of the European Transport Conference.",
-    "elmaghool_demand": "Elmaghraby, Z. & Kabadayi, S. (2022), 'Demand Forecasting Accuracy in Transportation: A Systematic Review', Transport Reviews, 42(3), 351–377.",
-}
-
 # ════════════════════════════════════════════════════════════════
 # DEFAULT PARAMETER VALUES (used when no preset is active)
 # ════════════════════════════════════════════════════════════════
@@ -251,7 +226,7 @@ DEFAULTS = dict(
     line_length_km=230, pct_tunnel=10, pct_viaduct=8,
     cost_at_grade=18.0, cost_tunnel=80.0, cost_viaduct=45.0,
     cost_signalling=1.5, cost_land=1.0, cost_stations=400.0,
-    cost_rolling=600.0, cost_overrun=0, constr_years=8, spend_profile='linear',
+    cost_rolling=600.0, cost_overrun=0, constr_years=8,
     counterfactual_capex=1500.0, counterfactual_opex_yr=55.0,
     opex_infra_maint=0.060, opex_energy=8.0, opex_staff=6.0,
     opex_rs_maint=5.0, opex_overhead=30.0, trains_day=60, op_days=350,
@@ -342,19 +317,10 @@ def run_cba(p):
 
     rows = []
 
-    # --- Construction phase: spread CAPEX according to spend_profile ---
-    if p['spend_profile'] == 'front_loaded':
-        weights = np.array([(CY - t) for t in range(CY)], dtype=float)
-        weights /= weights.sum()
-    elif p['spend_profile'] == 'back_loaded':
-        weights = np.array([(t + 1) for t in range(CY)], dtype=float)
-        weights /= weights.sum()
-    else:  # linear
-        weights = np.ones(CY) / CY
-
+    # --- Construction phase: spread CAPEX evenly ---
+    capex_ann_hsr = capex_hsr / CY
+    capex_ann_cf = capex_cf / CY
     for t in range(CY):
-        capex_ann_hsr = capex_hsr * weights[t]
-        capex_ann_cf = capex_cf * weights[t]
         df = 1 / (1 + dr) ** t
         rows.append(dict(
             year=t, phase='construction', pax=0,
@@ -400,8 +366,8 @@ def run_cba(p):
         time_gen = pax_generated * saving_hrs * vot_w * 0.5 / 1e6
 
         # Environmental: only shifted passengers
-        shifted_air_m = pax * air_s / 1e6  # million pax
-        shifted_car_m = pax * car_s / 1e6  # million pax
+        shifted_air_m = pax * air_s / 1e6
+        shifted_car_m = pax * car_s / 1e6
         env_air = (shifted_air_m * p['co2_per_mpax'] * p['co2_price'] / 1e6) if inc_env_air else 0
         env_car = (shifted_car_m * (p['co2_per_mpax'] * 0.4) * p['co2_price'] / 1e6) if inc_env_car else 0
 
@@ -409,9 +375,9 @@ def run_cba(p):
         acc = (shifted_car_m * p['accident_ben']) if inc_acc else 0
 
         # Congestion relief is anchored to base-year car shift and scales with shifted car passengers.
-        base_shifted_car_raw = p['annual_pax'] * car_s  # raw pax (not millions)
-        if inc_cong and base_shifted_car_raw > 0:
-            cong_unit = p['congestion'] / base_shifted_car_raw
+        base_shifted_car_m = p['annual_pax'] * car_s
+        if inc_cong and base_shifted_car_m > 0:
+            cong_unit = p['congestion'] / base_shifted_car_m
             cong = shifted_car_m * cong_unit
         else:
             cong = 0
@@ -1014,8 +980,6 @@ with st.sidebar:
         help="Optimism-bias adjustment. Flyvbjerg reference: +44.7% median for rail.")
     constr_years = st.slider("Construction period (yr)", 3, 20, pv('constr_years'),
         help="Ground-breaking to revenue service. CAPEX is spread linearly.")
-    spend_profile = st.selectbox("CAPEX spend profile", ["linear", "front_loaded", "back_loaded"], index=0,
-        help=f"Distribution of CAPEX across construction years. {CITATIONS['de_vos_construction']}")
 
     # Derived info
     capex_preview = compute_capex(dict(
@@ -1226,7 +1190,7 @@ params = build_inputs(dict(
     line_length_km=line_length_km, pct_tunnel=pct_tunnel, pct_viaduct=pct_viaduct,
     cost_at_grade=cost_at_grade, cost_tunnel=cost_tunnel, cost_viaduct=cost_viaduct,
     cost_signalling=cost_signalling, cost_land=cost_land, cost_stations=cost_stations,
-    cost_rolling=cost_rolling, cost_overrun=cost_overrun, constr_years=constr_years, spend_profile=spend_profile,
+    cost_rolling=cost_rolling, cost_overrun=cost_overrun, constr_years=constr_years,
     opex_infra_maint=opex_infra_maint, opex_energy=opex_energy, opex_staff=opex_staff,
     opex_rs_maint=opex_rs_maint, opex_overhead=opex_overhead, trains_day=trains_day,
     op_days=op_days, annual_pax=annual_pax, demand_growth=demand_growth,

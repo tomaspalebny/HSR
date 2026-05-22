@@ -1,0 +1,40 @@
+{
+  "repo": "HSR",
+  "remote": "https://github.com/tomaspalebny/HSR.git",
+  "last_commit": {
+    "hash": "bb22864a1872ca3039cdae3623b55db3b8c8e437",
+    "date": "2026-03-27 19:00:33 +0100",
+    "message": "Update COPYRIGHT.md"
+  },
+  "structure": {
+    "total_files": 15,
+    "total_size_kb": 650.0,
+    "extensions": {
+      ".py": 7,
+      ".md": 4,
+      ".txt": 2,
+      ".json": 2
+    },
+    "structure_hash": "updated_2026-05-19"
+  },
+  "tracking": {
+    "last_checked": "2026-05-19T18:35:00Z",
+    "check_count": 2,
+    "changes_detected": ["v4.1 capacity release + post-COVID dip params, 9th MCA criterion"]
+  },
+  "summary": {
+    "purpose": "Interaktivní Streamlit aplikace pro socio-ekonomickou cost-benefit analýzu (CBA) projektů vysokorychlostních železnic (HSR). Porovnává HSR investici s protifikčním scénářem (modernizace konvenční tratě) inkrementální metodikou dle EU guidelines. Zahrnuje deterministickou CBA (NPV, BCR, IRR), Reference Class Forecasting (Flyvbjerg), tornado citlivost, Monte Carlo, threshold analýzu, srovnání 15 evropských koridorů, a MCA s 9 kritérii. Doprovodný nástroj k článku 'When is HSR Worthwhile?' (Nash et al. 2026).",
+    "key_files": {
+      "hsr_cba_app_upg2.py": "Hlavní aplikace v4.1 (2237 ř.) – CBA engine s cap_release + post_covid_dip, tornado, Monte Carlo, threshold, 15 koridorů, audit trail",
+      "hsr_mca_tab.py": "MCA modul (398 ř.) – 9 kritérií vč. capacity_release, radar chart, Combined Decision Index",
+      "technical_paper.md": "Akademický paper (~47KB) – dokumentuje i nové parametry a 9. MCA kritérium",
+      "paper_progress.json": "Progress tracker psaní paperu – 4 fáze, vše completed",
+      "citation_verification.json": "Ověřené citace, 7 country profilů (VOT, diskont, CO₂), Flyvbjerg parametry",
+      "patch_to_v4.py": "Migrační skript (15 patchů) z v3.0 na v4.0",
+      "PROJECT_STRUCTURE.md": "Architektura projektu, algoritmy, datové toky"
+    },
+    "tech_stack": "Streamlit, Plotly, Pandas, NumPy, Python 3.13",
+    "status": "v4.1 produkční. Všechny 7 MCA TODO implementovány. Regresní test 13/13 PASS. Paper aktualizován. FLYVBJERG_DEMAND_FACTOR=0.486 korektní.",
+    "last_summarized": "2026-05-19T18:35:00Z"
+  }
+}

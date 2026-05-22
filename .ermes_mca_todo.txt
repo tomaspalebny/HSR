@@ -1,0 +1,17 @@
+MCA + CBA Enhancement Status 2026-05-20
+==========================================
+
+DONE:
+1. hsr_mca_tab.py — Hotovo: 8 kritérií, MCA_CRITERION_SOURCES, per-koridor skóre s justifikacemi
+2. technical_paper.md §6.6 — Hotovo: MCA zdokumentováno s citacemi
+3. DEFAULTS += released_capacity_benefit + post_covid_dip — Hotovo
+4. CITATIONS += jaspers_vademecum, sfdi_md_mca — Hotovo
+5. PARAM_META — entries pro released_capacity_benefit a post_covid_dip — Hotovo
+6. Sidebar — slidery pro nové params (capacity release + post-COVID dip) — Hotovo
+7. run_cba() — capacity release benefit logic (cap_release column, pv_benefits, IRR, summary) — Hotovo
+8. CITATIONS — uk_tag_capacity entry — Hotovo
+9. capacity_release jako 9. MCA kritérium (váhy rebalancovány na 100%, všechny koridory, default skóre) — Hotovo
+10. run_cba() — post_covid_dip logic (lineární recovery přes 5 let) — Hotovo
+11. technical_paper.md — dokumentace nových parametrů + UK TAG A5.4 citace + param tabulka — Hotovo
+
+ALL ITEMS COMPLETE. Regression test: 13/13 PASS.

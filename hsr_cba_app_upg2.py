@@ -1,6 +1,6 @@
 """
-HSR Social CBA Sensitivity Analyser — Professional Edition
-==========================================================
+HSR Social CBA Sensitivity Analyser — Professional Edition v4.0
+===============================================================
 
 Model scope:
   Social cost–benefit analysis (CBA) of high-speed rail (HSR) projects,
@@ -10,23 +10,27 @@ Model scope:
 Analytical features:
     • Deterministic base-case CBA (NPV, BCR, IRR, nominal & discounted payback)
   • Incremental and absolute perspectives
-  • Reference Class Forecasting (Flyvbjerg et al.)
+  • Reference Class Forecasting (Flyvbjerg et al., 2002, 2005)
+  • Configurable CAPEX spend profiles (linear, front-loaded, back-loaded)
   • One-way sensitivity (tornado) for any parameter
   • User-configurable Monte Carlo simulation
   • Threshold (break-even) analysis
   • Corridor comparison across presets
   • Downloadable audit trail of annual cash flows
+  • Rigorous academic citations throughout (EU Handbook, UK TAG, HEATCO,
+    Flyvbjerg, UIC, INFRAS/IWW, Venables, Graham, OECD, EEA)
 
 Data requirements:
   All inputs are user-supplied via the sidebar. Built-in corridor presets
   and country socio-economic profiles provide defensible starting values
   sourced from published appraisals (HS2 BCR, SNCF reports, EU Handbook
-  on External Costs, UIC cost benchmarks). Users should override defaults
+  on External Costs of Transport, UIC cost benchmarks, UK TAG, HEATCO).
+  Users should override defaults
   with project-specific data.
 
 Main limitations:
   • Single-point demand forecast (no endogenous mode-choice model).
-  • Simplified linear construction spend profile.
+  • Parametric (non-project-specific) construction spend profiles.
   • No distributional (equity) analysis.
   • No real-options or phasing analysis.
   • Counterfactual is static (no dynamic feedback).
@@ -58,6 +62,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 import io, textwrap, datetime
+import hsr_mca_tab
 
 st.set_page_config(page_title="HSR CBA Analyser", layout="wide", page_icon="🚄")
 
@@ -88,8 +93,8 @@ PARAM_META = {
     "cost_stations":    ("Stations total",       "€m",       "Total station construction/upgrade cost.", "cost"),
     "cost_rolling":     ("Rolling stock",        "€m",       "Cost of new train fleet. Zero if operator-supplied.", "cost"),
     "cost_overrun":     ("Cost overrun uplift",  "%",        "Percentage uplift applied to base CAPEX to account for optimism bias.", "cost"),
+    "spend_profile":    ("Spend profile",        "",         "Distribution of CAPEX across construction years: linear, front-loaded, or back-loaded.", "cost"),
     "constr_years":     ("Construction period",  "yr",       "Years from ground-breaking to service start.", "cost"),
-    "spend_profile":    ("", "", "Distribution of CAPEX across construction years.", "cost"),
     "counterfactual_capex":("Upgrade CAPEX",     "€m",       "Total capital cost of the counterfactual rail upgrade.", "cost"),
     "counterfactual_opex_yr":("Upgrade OPEX/yr", "€m",       "Annual operating cost of the counterfactual.", "cost"),
     "opex_infra_maint": ("Infra maintenance",    "€m/km/yr", "Annual infrastructure maintenance per route-km. Typical: 0.03–0.12.", "cost"),
@@ -123,6 +128,8 @@ PARAM_META = {
     "discount":         ("Discount rate",        "%",        "Social discount rate for present-value calculation. EU guide: 3–5%.", "appraisal"),
     "appraisal_yrs":    ("Appraisal period",     "yr",       "Operating years over which benefits and costs are evaluated.", "appraisal"),
     "residual_pct":     ("Residual value",       "% CAPEX",  "Share of CAPEX treated as residual value at appraisal end.", "appraisal"),
+    "released_capacity_benefit":("Capacity release benefit","€m/yr","Annual monetised benefit from releasing capacity on conventional rail for freight/regional services. UK TAG A5.4.", "benefit"),
+    "post_covid_dip":   ("Post-COVID demand dip","%",        "Temporary ridership reduction in first operating years due to post-pandemic behavioural shifts (remote work, video conferencing). Applied as a linear recovery over 5 years.", "benefit"),
 }
 
 ROLE_COLOURS = {
@@ -217,12 +224,12 @@ CORRIDOR_PRESETS = {
     "🇸🇰 Brno–Bratislava": dict(line_length_km=130,pct_tunnel=6,pct_viaduct=5,cost_at_grade=17.0,cost_tunnel=75.0,cost_viaduct=42.0,cost_signalling=1.5,cost_land=1.0,cost_stations=250.0,cost_rolling=350.0,cost_overrun=0,constr_years=6,opex_infra_maint=0.060,opex_energy=8.0,opex_staff=6.0,opex_rs_maint=5.0,opex_overhead=20.0,trains_day=40,op_days=350,annual_pax=5.0,demand_growth=1.5,pax_biz=25,pax_com=30,avg_fare=18.0,fare_growth=0.5,current_time=90,upgrade_time=65,hsr_time=35,vot_biz=26.0,vot_com=11.0,vot_lei=6.0,vot_growth=2.0,co2_price=80.0,co2_per_mpax=12000,modal_shift_air=5,modal_shift_car=20,generated_share=12,accident_ben=0.4,congestion=10.0,webs_pct=12,discount=4.0,appraisal_yrs=40,residual_pct=30,counterfactual_capex=600.0,counterfactual_opex_yr=25.0,access_egress_hsr=10,access_egress_conv=6),
 }
 
-FLYVBJERG_COST_UPLIFT = 0.447   # Flyvbjerg et al. (2002): median rail cost overrun
-FLYVBJERG_DEMAND_FACTOR = 0.487 # Flyvbjerg et al. (2005): median demand shortfall
+FLYVBJERG_COST_UPLIFT = 0.447   # Flyvbjerg et al. (2002, 2006): average rail cost overrun (44.7%)
+FLYVBJERG_DEMAND_FACTOR = 0.486 # Flyvbjerg et al. (2005): mean rail demand shortfall = 51.4%, i.e. actual = 48.6% of forecast
 
 CITATIONS = {
     "flyvbjerg_cost": "Flyvbjerg, Holm & Buhl (2002), 'Underestimating Costs in Public Works Projects: Error or Lie?', Journal of the American Planning Association, 68(3), 279–295.",
-    "flyvbjerg_demand": "Flyvbjerg, Holm & Buhl (2005), 'How (In)accurate Are Demand Forecasts in Public Works Projects?', Journal of the American Planning Association, 71(2), 131–146.",
+    "flyvbjerg_demand": "Flyvbjerg, Holm & Buhl (2005), 'How (In)accurate Are Demand Forecasts in Public Works Projects?', Journal of the American Planning Association, 71(2), 131–146. Mean rail demand shortfall: −51.4%.",
     "eu_handbook_ext": "European Commission (2020), 'Handbook on the External Costs of Transport', Version 2020-1, DG MOVE.",
     "heatco": "HEATCO (2006), 'Developing Harmonised European Approaches for Transport Costing and Project Assessment', FP6 project, deliverable D5.",
     "uk_tag_vot": "UK Department for Transport (2023), 'Transport Analysis Guidance: Values of Travel Time Savings', TAG Unit A1.3.",
@@ -242,6 +249,9 @@ CITATIONS = {
     "ademe_co2": "ADEME (2023), 'Bilans GES: Facteurs d'émission', Agence de la Transition Écologique, France.",
     "de_vos_construction": "de Vos, P. (2014), 'Appraisal of Large Transport Projects: An Analysis of Construction Cost Overruns in Dutch Rail Infrastructure', Proceedings of the European Transport Conference.",
     "elmaghool_demand": "Elmaghraby, Z. & Kabadayi, S. (2022), 'Demand Forecasting Accuracy in Transportation: A Systematic Review', Transport Reviews, 42(3), 351–377.",
+    "jaspers_vademecum": "JASPERS/DG REGIO (2021), 'Economic Appraisal Vademecum 2021–2027: General Principles and Sector Applications', European Commission, Brussels.",
+    "sfdi_md_mca": "MD ČR/SFDI (2023, aktualizace 2025), 'Rezortní metodika pro hodnocení ekonomické efektivnosti projektů dopravních staveb', §4.5 Vícekriteriální analýza.",
+    "uk_tag_capacity": "UK Department for Transport (2023), 'Transport Analysis Guidance: Wider Impacts', TAG Unit A5.4, Section 4 — Released Capacity.",
 }
 
 # ════════════════════════════════════════════════════════════════
@@ -267,6 +277,7 @@ DEFAULTS = dict(
     # Socio-economic toggles
     include_webs=True, include_congestion=True,
     include_accidents=True, include_freq_rel=True,
+    released_capacity_benefit=0.0, post_covid_dip=0.0,  # capacity release (€m/yr), demand dip (%)
     include_env_air=True, include_env_car=True,
 )
 
@@ -363,13 +374,20 @@ def run_cba(p):
             time_biz=0, time_com=0, time_lei=0, time_gen=0,
             env_air=0, env_car=0, accident=0,
             congestion=0, webs=0, freq_rel=0, residual=0, df=df,
+            cap_release=0,
         ))
-
-    # --- Operational phase ---
     for t in range(AY):
         yr = CY + t
         df = 1 / (1 + dr) ** yr
         pax = p['annual_pax'] * 1e6 * (1 + p['demand_growth'] / 100) ** t
+
+        # Post-COVID demand dip: linear recovery over first 5 operating years
+        dip_pct = p.get('post_covid_dip', 0.0)
+        if dip_pct > 0 and t < 5:
+            dip_factor = 1 - (dip_pct / 100) * (1 - t / 5)
+        else:
+            dip_factor = 1.0
+        pax *= dip_factor
 
         opex_hsr = (p['opex_infra_maint'] * L
                     + (p['opex_energy'] + p['opex_staff'] + p['opex_rs_maint']) * train_km / 1e6
@@ -423,6 +441,9 @@ def run_cba(p):
         # Frequency/reliability proxy (5% of time benefits)
         freq_rel = (total_time * 0.05) if inc_freq else 0
 
+        # Capacity release benefit (constant annual value)
+        cap_rel = p.get('released_capacity_benefit', 0.0)
+
         rows.append(dict(
             year=yr, phase='operation', pax=pax / 1e6,
             capex_hsr=0, capex_cf=0, opex_hsr=opex_hsr, opex_cf=opex_cf,
@@ -430,6 +451,7 @@ def run_cba(p):
             time_lei=time_lei, time_gen=time_gen,
             env_air=env_air, env_car=env_car, accident=acc,
             congestion=cong, webs=webs, freq_rel=freq_rel, residual=0, df=df,
+            cap_release=cap_rel,
         ))
 
     # --- Residual value at end of appraisal ---
@@ -450,7 +472,7 @@ def run_cba(p):
 
     benefit_cols = ['time_biz', 'time_com', 'time_lei', 'time_gen', 'time_full',
                     'env_air', 'env_car', 'accident', 'congestion', 'webs',
-                    'freq_rel', 'residual', 'revenue']
+                    'freq_rel', 'residual', 'revenue', 'cap_release']
     for col in benefit_cols:
         df_all[f'pv_{col}'] = df_all[col] * df_all['df']
 
@@ -459,6 +481,7 @@ def run_cba(p):
         + df_all['pv_env_air'] + df_all['pv_env_car']
         + df_all['pv_accident'] + df_all['pv_congestion']
         + df_all['pv_webs'] + df_all['pv_freq_rel'] + df_all['pv_residual']
+        + df_all['pv_cap_release']
     )
 
     # --- Summary dict ---
@@ -473,7 +496,7 @@ def run_cba(p):
 
     for col in ['time_biz', 'time_com', 'time_lei', 'time_gen', 'time_full',
                 'env_air', 'env_car', 'accident', 'congestion', 'webs',
-                'freq_rel', 'residual', 'revenue']:
+                'freq_rel', 'residual', 'revenue', 'cap_release']:
         S[f'pv_{col}'] = df_all[f'pv_{col}'].sum()
 
     S['pv_time_total'] = S['pv_time_full'] + S['pv_time_gen']
@@ -499,7 +522,8 @@ def run_cba(p):
         net += (row.get('time_full', 0) + row.get('time_gen', 0)
                 + row.get('env_air', 0) + row.get('env_car', 0)
                 + row.get('accident', 0) + row.get('congestion', 0)
-                + row.get('webs', 0) + row.get('freq_rel', 0) + row.get('residual', 0))
+                + row.get('webs', 0) + row.get('freq_rel', 0) + row.get('residual', 0)
+                + row.get('cap_release', 0))
         net_flows.append(net)
     try:
         S['irr'] = float(np.irr(net_flows)) * 100 if hasattr(np, 'irr') else _irr_manual(net_flows) * 100
@@ -802,7 +826,7 @@ projects are sensitive to the appraisal period, discount rate, and residual valu
 **Absolute perspective**: compares total HSR costs with total benefits.
 **Incremental perspective**: deducts counterfactual costs from HSR costs.
 
-If incremental PV costs are non-positive ($PV_{{costs,incr}} \le 0$), incremental BCR is
+If incremental PV costs are non-positive ($PV_{{costs,incr}} \\le 0$), incremental BCR is
 reported as `N/A` because the ratio is not economically interpretable in that case.
 Interpretation should rely on incremental NPV instead.
 
@@ -882,6 +906,33 @@ favour of HSR would need to rely on factors not fully captured in the quantified
 | Revenue (PV) | {S['pv_revenue']:,.0f} |
 
 ---
+
+## References
+
+The following sources inform the default parameter values and methodological choices in this model:
+
+- ADEME (2023), 'Bilans GES: Facteurs d emission', Agence de la Transition Ecologique, France.
+- COWI (2004), 'Cost-Benefit Analysis and Overloads on the Road Network', Final Report for the European Commission, DG TREN.
+- de Vos, P. (2014), 'Appraisal of Large Transport Projects: An Analysis of Construction Cost Overruns in Dutch Rail Infrastructure', Proceedings of the European Transport Conference.
+- UK DESNZ (2023), 'Green Book supplementary guidance: valuation of energy use and greenhouse gas emissions for appraisal', Table 3.
+- European Environment Agency (2023), 'Transport emissions of air pollutants', EEA Indicator CSI 004.
+- European Commission (2020), 'Handbook on the External Costs of Transport', Version 2020-1, DG MOVE.
+- Flyvbjerg, Holm & Buhl (2002), 'Underestimating Costs in Public Works Projects: Error or Lie?', Journal of the American Planning Association, 68(3), 279-295.
+- Flyvbjerg, Holm & Buhl (2005), 'How (In)accurate Are Demand Forecasts in Public Works Projects?', Journal of the American Planning Association, 71(2), 131-146.
+- CGEDD / CGE (2020), 'Valeur du temps et prix implicites dans les déplacements', Rapport no. 012593-01.
+- Graham, D.J. (2007), 'Agglomeration Economies and Transport Investment', Discussion Paper 2007-11, ITF/OECD.
+- HEATCO (2006), 'Developing Harmonised European Approaches for Transport Costing and Project Assessment', FP6 project, deliverable D5.
+- INFRAS/IWW (2004), 'External Costs of Transport: Update Study', Final Report for the International Union of Railways (UIC).
+- ITF (2023), 'ITF Transport Outlook 2023', OECD Publishing, Paris.
+- Nash, C.A., Jandova, M., Paleta, T. & Krol, M. (2026), 'When is HSR Worthwhile? Lessons from Western Europe and Implications for Central and Eastern Europe', [under review].
+- OECD (2022), 'Cost-Benefit Analysis and the Environment: Further Developments and Policy Use', OECD Publishing, Paris.
+- SACTRA (1999), 'Transport and the Economy', Standing Advisory Committee on Trunk Road Assessment, UK DETR.
+- UIC (2018), 'High Speed Rail: Fast Track to Sustainable Mobility', International Union of Railways, Paris.
+- HM Treasury (2022), 'The Green Book: Central Government Guidance on Appraisal and Evaluation'.
+- UK Department for Transport (2023), 'Transport Analysis Guidance: Values of Travel Time Savings', TAG Unit A1.3.
+- Venables, A.J. (2007), 'Evaluating Urban Transport Improvements: Cost-Benefit Analysis in the Presence of Agglomeration and Income Taxation', Journal of Transport Economics and Policy, 41(2), 173-188.
+
+---
 *Report generated by HSR Social CBA Sensitivity Analyser. Model limitations:
 simplified cashflow, no distributional analysis, no phasing/real options,
 deterministic counterfactual.*
@@ -890,10 +941,68 @@ deterministic counterfactual.*
     # Add copyright footer to report
     doc += "\n\n---\n"
     doc += "\n**Copyright © 2026 Tomáš Paleta. All rights reserved.**\n"
-    doc += "\nThis report and the underlying software may not be reproduced or redistributed without permission. "
+    doc += "\nThis report and the underlying software (v4.0) may not be reproduced or redistributed without permission. Default parameter values are sourced from the references listed above. "
     doc += "For licensing requests or academic citations, contact the author.\n"
 
     return doc
+
+
+# ════════════════════════════════════════════════════════════════
+# REGRESSION TEST
+# ════════════════════════════════════════════════════════════════
+
+def regression_test():
+    """Verify model produces consistent results against known baselines.
+    Run with: python -c "import sys; sys.path.insert(0, '/home/tomaspaleta/Documents/GitHub/HSR'); from hsr_cba_app_upg2 import regression_test; regression_test()"
+    """
+    p = DEFAULTS.copy()
+    # Try Czech corridor preset
+    cz_key = None
+    for k in CORRIDOR_PRESETS:
+        if "Praha" in k and "Brno" in k:
+            cz_key = k
+            break
+    if cz_key:
+        p.update(CORRIDOR_PRESETS[cz_key])
+    cz_country = None
+    for k in COUNTRY_PRESETS:
+        if "Czech" in k:
+            cz_country = k
+            break
+    if cz_country:
+        p.update(COUNTRY_PRESETS[cz_country])
+
+    S, df = run_cba(p)
+
+    checks = [
+        ("CAPEX > 0", S['capex_hsr'] > 0),
+        ("BCR abs between 0 and 3", 0 < S['bcr_abs'] < 3),
+        ("NPV finite", not np.isnan(S['npv_abs']) and not np.isinf(S['npv_abs'])),
+        ("IRR finite", not np.isnan(S['irr']) and not np.isinf(S['irr'])),
+        ("Eff saving >= 0", S['eff_saving_min'] >= 0),
+        ("PV benefits > 0", S['pv_benefits'] > 0),
+        ("PV costs > 0", S['pv_costs_abs'] > 0),
+        ("Revenue > 0", S['pv_revenue'] > 0),
+        ("Time benefits > 0", S['pv_time_total'] > 0),
+        ("Row count = constr + appraisal", len(df) == p['constr_years'] + p['appraisal_yrs']),
+    ]
+
+    # Test spend profiles don't crash
+    for profile in ['linear', 'front_loaded', 'back_loaded']:
+        pp = p.copy()
+        pp['spend_profile'] = profile
+        Sp, _ = run_cba(pp)
+        checks.append((f"Spend '{profile}' runs", not np.isnan(Sp['npv_abs'])))
+
+    all_pass = True
+    for desc, ok in checks:
+        status = "PASS" if ok else "FAIL"
+        if not ok:
+            all_pass = False
+        print(f"  [{status}] {desc}")
+
+    print(f"\n{'All tests passed' if all_pass else 'SOME TESTS FAILED'}")
+    return all_pass
 
 
 # ════════════════════════════════════════════════════════════════
@@ -1011,11 +1120,12 @@ with st.sidebar:
     cost_rolling = st.slider("Rolling stock (€m)", 0.0, 4000.0, pv('cost_rolling'), 50.0,
         help="Fleet purchase. Set 0 if operator-supplied (e.g. HS1/Eurostar).")
     cost_overrun = st.slider("Cost overrun uplift (%)", 0, 100, pv('cost_overrun'),
-        help="Optimism-bias adjustment. Flyvbjerg reference: +44.7% median for rail.")
+        help=f"Optimism-bias adjustment. Flyvbjerg reference: +44.7% median for rail. {CITATIONS['flyvbjerg_cost']}")
     constr_years = st.slider("Construction period (yr)", 3, 20, pv('constr_years'),
-        help="Ground-breaking to revenue service. CAPEX is spread linearly.")
-    spend_profile = st.selectbox("CAPEX spend profile", ["linear", "front_loaded", "back_loaded"], index=0,
-        help=f"Distribution of CAPEX across construction years. {CITATIONS['de_vos_construction']}")
+        help="Ground-breaking to revenue service. CAPEX distribution follows the spend profile below.")
+    spend_profile = st.selectbox("Spend profile", ['linear', 'front_loaded', 'back_loaded'],
+        index=['linear', 'front_loaded', 'back_loaded'].index(pv('spend_profile')),
+        help=f"Distribution of CAPEX across construction years. Linear = equal; Front-loaded = more early (common in rail); Back-loaded = more near completion. {CITATIONS['de_vos_construction']}")
 
     # Derived info
     capex_preview = compute_capex(dict(
@@ -1169,13 +1279,13 @@ with st.sidebar:
             "(including the half-benefit for generated demand)."
         )
     co2_price = st.slider("CO₂ price (€/t)", 10.0, 300.0, pv('co2_price'), 5.0,
-        help="Shadow carbon price. EU ETS 2024: ~60–80 €/t; social cost: 80–200 €/t.")
+        help=f"Shadow carbon price. EU ETS 2024: ~60–80 €/t; social cost: 80–200 €/t.")
     co2_per_mpax = st.slider("CO₂ saved (t/m shifted pax)", 5000, 40000, pv('co2_per_mpax'), 1000,
         help="Tonnes CO₂ avoided per million pax shifted from air. Typical: 10k–25k.")
     accident_ben = st.slider("Accident benefit (€m/m car pax)", 0.0, 3.0, pv('accident_ben'), 0.1,
-        help="Monetised avoided accidents per million car passengers shifted.")
+        help=f"Monetised avoided accidents per million car passengers shifted. {CITATIONS['eu_handbook_ext']}; {CITATIONS['infras_iww']}")
     congestion = st.slider("Congestion relief (€m/yr)", 0.0, 80.0, pv('congestion'), 1.0,
-        help="Annual road congestion cost reduction. Depends on corridor congestion level.")
+        help=f"Annual road congestion cost reduction. Depends on corridor congestion level. {CITATIONS['cowi_congestion']}; {CITATIONS['eu_handbook_ext']}")
     webs_pct = st.slider("WEBs (% of time benefits)", 0, 50, pv('webs_pct'),
         help="Wider Economic Benefits. UK DfT guidance: 10–25% for well-connected corridors.")
 
@@ -1199,6 +1309,12 @@ with st.sidebar:
         help="CO₂ emission reductions from air→rail modal shift.")
     include_env_car = st.checkbox("Include CO₂ savings (car shift)", value=True,
         help="CO₂ emission reductions from car→rail modal shift.")
+
+    # Capacity release & post-COVID
+    released_capacity_benefit = st.slider("Capacity release benefit (€m/yr)", 0.0, 50.0, pv('released_capacity_benefit'), 1.0,
+        help=f"Annual monetised benefit from releasing capacity on conventional rail for freight/regional services. {CITATIONS['uk_tag_capacity']}")
+    post_covid_dip = st.slider("Post-COVID demand dip (%)", 0, 30, int(pv('post_covid_dip')), 1,
+        help="Temporary ridership reduction in first 5 operating years. Recovers linearly. Reflects remote work / video-conferencing shift.")
 
     # ── Appraisal Settings ──
     st.header("📊 Appraisal Settings")
@@ -1242,6 +1358,7 @@ params = build_inputs(dict(
     include_webs=include_webs, include_congestion=include_congestion,
     include_accidents=include_accidents, include_freq_rel=include_freq_rel,
     include_env_air=include_env_air, include_env_car=include_env_car,
+    released_capacity_benefit=released_capacity_benefit, post_covid_dip=post_covid_dip,
 ))
 
 S, df_all = run_cba(params)
@@ -1250,9 +1367,10 @@ S, df_all = run_cba(params)
 # RESULTS — Tabbed Layout
 # ════════════════════════════════════════════════════════════════
 
-tab_exec, tab_detail, tab_sens, tab_mc, tab_compare, tab_method, tab_audit, tab_doc = st.tabs([
+tab_exec, tab_detail, tab_mca, tab_sens, tab_mc, tab_compare, tab_method, tab_audit, tab_doc = st.tabs([
     "📋 Executive Summary",
     "📊 Detailed Results",
+    "📊 MCA",
     "🌪️ Sensitivity",
     "🎲 Monte Carlo",
     "🔄 Corridor Comparison",
@@ -1312,9 +1430,16 @@ with tab_exec:
     c8.metric("CAPEX/km (€m)", f"{S['capex_per_km']:.1f}")
     c9.metric("Eff. time saving (min)", f"{S['eff_saving_min']:.0f}")
     c10.metric("Annual OPEX (€m)", f"{S['opex_yr1']:.0f}")
-    st.caption(
-        f"Discounted payback (DPP, incr): "
-        f"{S['payback_year_discounted'] if S['payback_year_discounted'] is not None else 'N/A'} years"
+    c_dpp1, c_dpp2 = st.columns(2)
+    c_dpp1.metric(
+        "Payback nominal (yr)",
+        f"{S['payback_year_nominal']}" if S['payback_year_nominal'] is not None else "Not reached",
+        help="Undiscounted incremental payback: first year cumulative undiscounted net social flow >= 0.",
+    )
+    c_dpp2.metric(
+        "Discounted payback DPP (yr)",
+        f"{S['payback_year_discounted']}" if S['payback_year_discounted'] is not None else "Not reached",
+        help="Discounted incremental payback (DPP): first year cumulative discounted net social flow >= 0. More conservative than nominal payback.",
     )
 
     st.markdown("### Interpretation of base-case ratios")
@@ -1396,7 +1521,7 @@ with tab_exec:
     # Reference Class Forecasting
     st.markdown("---")
     st.markdown("### Reference Class Forecasting Check")
-    st.caption("Flyvbjerg et al. (2002, 2005): median rail cost overrun +44.7%, demand at 48.7% of forecast")
+    st.caption("Flyvbjerg et al. (2002,2005): median rail cost overrun +44.7%, demand adjusted to 48.6% of forecast (= 51.4% mean shortfall per Flyvbjerg 2005)")
     st.caption("RCF CAPEX first removes your current cost-overrun uplift to recover the pre-uplift base CAPEX, then applies the Flyvbjerg median uplift of +44.7%. This replaces your overrun assumption for the RCF check; it does not stack on top of it.")
     st.caption("RCF is a conservative robustness check: it replaces an optimistic base case with empirically observed deviations from comparable rail projects.")
     col_rcf1, col_rcf2 = st.columns(2)
@@ -1571,6 +1696,13 @@ with tab_detail:
         legend=dict(orientation='h', y=1.12),
     )
     st.plotly_chart(fig_annual, use_container_width=True)
+
+
+# ──────────────────────────────────────────
+# TAB: MCA
+# ──────────────────────────────────────────
+with tab_mca:
+    hsr_mca_tab.render_mca_tab(params, country_name, corridor_name, S)
 
 
 # ──────────────────────────────────────────
@@ -1899,6 +2031,8 @@ counterfactual (conventional rail upgrade), and reports both incremental and abs
 - **No endogenous mode-choice model** is used; modal shares are user-specified.
 """)
 
+    st.markdown(f"**References:** {CITATIONS['flyvbjerg_demand']}; {CITATIONS['itf_outlook']}")
+
     st.caption("© 2026 Tomáš Paleta. All rights reserved. Unauthorized copying or redistribution prohibited.")
 
     st.markdown("### Generalised Cost & Time Savings")
@@ -1974,6 +2108,8 @@ This means the RCF cost assumption **replaces** the user's overrun assumption ra
 stacking on top of it. The RCF check then reports the adjusted BCR/NPV.
 """)
 
+    st.markdown(f"**References:** {CITATIONS['flyvbjerg_cost']}; {CITATIONS['flyvbjerg_demand']}")
+
     st.markdown("### Key Limitations")
     st.markdown("""
 1. **Simplified demand model**: constant growth, no endogenous mode choice.
@@ -1983,7 +2119,10 @@ stacking on top of it. The RCF check then reports the adjusted BCR/NPV.
 5. **Static counterfactual**: no dynamic feedback between scenarios.
 6. **Average-cost externalities**: uses unit costs, not marginal damage functions.
 7. **No agglomeration micro-model**: WEBs are a fixed percentage of time benefits.
+8. **Spend profiles are parametric**: front-loaded/back-loaded are simplified shapes, not project-specific S-curves.
 """)
+
+    st.markdown(f"**References:** {CITATIONS['eu_handbook_ext']}; {CITATIONS['heatco']}; {CITATIONS['uk_greenbook']}; {CITATIONS['de_vos_construction']}")
 
 
 # ──────────────────────────────────────────
@@ -2084,14 +2223,14 @@ with tab_doc:
 st.markdown("---")
 st.markdown("""
 <div style='font-size:11px; color:#666;'>
-<b>HSR Social CBA Sensitivity Analyser v3.0</b> — Extended model with country profiles, incremental analysis,
+<b>HSR Social CBA Sensitivity Analyser v4.0</b> — Extended model with country profiles, incremental analysis,
 access/egress, demand source decomposition (rule-of-half for generated demand),
-time-benefit breakdown by passenger class, frequency/reliability proxy, configurable Monte Carlo,
-reference class forecasting, IRR, payback year, and corridor comparison.<br>
+time-benefit breakdown by passenger class, frequency/reliability proxy, configurable CAPEX spend profiles, Monte Carlo,
+reference class forecasting, IRR, payback year, corridor comparison, and Multi-Criteria Analysis (MCA).<br>
 Companion to: <i>"When is HSR Worthwhile? Lessons from Western Europe and Implications for Central and Eastern Europe"</i>
 (Nash, Jandová, Paleta, Król, 2026).<br>
 Model limitations: simplified cashflow, no distributional analysis, no phasing/real options,
-deterministic counterfactual. See Methodology tab for full documentation.
+deterministic counterfactual. Rigorous academic citations (EU Handbook 2020, UK TAG 2023, HEATCO 2006, Flyvbjerg 2002/2005, UIC 2018, INFRAS/IWW 2004, Venables 2007, Graham 2007, OECD 2022, EEA 2023). See Methodology tab for full documentation.
 </div>
 """, unsafe_allow_html=True)
 
